@@ -3,8 +3,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dumbbell, Plus, Clock, Flame, Calendar } from "lucide-react";
+import { Dumbbell, Plus, Clock, Flame, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 interface Workout {
   id: string;
@@ -22,20 +23,31 @@ const ActivityPage = () => {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchWorkouts = async () => {
     if (!user) return;
-
-    supabase
+    const { data } = await supabase
       .from("workouts")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(20)
-      .then(({ data }) => {
-        setWorkouts(data || []);
-        setLoading(false);
-      });
+      .limit(20);
+    setWorkouts(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchWorkouts();
   }, [user]);
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from("workouts").delete().eq("id", id);
+    if (error) {
+      toast.error("Failed to delete workout");
+    } else {
+      setWorkouts((prev) => prev.filter((w) => w.id !== id));
+      toast.success("Workout deleted");
+    }
+  };
 
   const typeLabel = (type: string | null) => {
     const labels: Record<string, string> = {
@@ -82,14 +94,14 @@ const ActivityPage = () => {
       ) : (
         <div className="space-y-3">
           {workouts.map((w) => (
-            <Card key={w.id}>
+            <Card key={w.id} className="group">
               <CardContent className="flex items-center justify-between p-4">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-primary/10 p-2">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="rounded-lg bg-primary/10 p-2 flex-shrink-0">
                     <Dumbbell className="h-5 w-5 text-primary" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">{w.name}</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm truncate">{w.name}</p>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
                       <span>{typeLabel(w.workout_type)}</span>
                       {w.duration && (
@@ -105,9 +117,19 @@ const ActivityPage = () => {
                     </div>
                   </div>
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  {format(new Date(w.completed_at || w.created_at), "h:mm a")}
-                </span>
+                <div className="flex items-center gap-2 shrink-0 ml-3">
+                  <span className="text-xs text-muted-foreground">
+                    {format(new Date(w.completed_at || w.created_at), "h:mm a")}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => handleDelete(w.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
