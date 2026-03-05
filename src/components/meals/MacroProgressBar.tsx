@@ -11,7 +11,7 @@ const MacroProgressBar = ({ label, current, target, color }: MacroProgressBarPro
   return (
     <div className="flex-1 text-center space-y-1.5">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="h-1.5 rounded-full bg-muted overflow-hidden mx-2">
+      <div className="h-2.5 rounded-full bg-muted overflow-hidden mx-2">
         <div
           className={`h-full rounded-full transition-all duration-500 ${color}`}
           style={{ width: `${progress}%` }}
