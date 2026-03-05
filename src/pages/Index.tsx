@@ -1,14 +1,11 @@
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Activity, Flame, Drumstick, Moon, Footprints, UtensilsCrossed, Dumbbell, RefreshCw, Send } from "lucide-react";
-import { useState } from "react";
+import { Flame, Drumstick, Moon, Footprints, UtensilsCrossed, Dumbbell, RefreshCw } from "lucide-react";
+import ChatInterface from "@/components/ChatInterface";
 
 const Index = () => {
   const { user } = useAuth();
-  const [prompt, setPrompt] = useState("");
-
   const firstName = user?.user_metadata?.display_name?.split(" ")[0] || "there";
 
   return (
@@ -66,34 +63,8 @@ const Index = () => {
         </Card>
       </div>
 
-      {/* AI Chat prompt */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Activity className="h-4 w-4 text-primary" />
-            Ask your health agent
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setPrompt("");
-            }}
-          >
-            <Input
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Did I eat enough protein today?"
-              className="flex-1"
-            />
-            <Button type="submit" size="icon" disabled={!prompt.trim()}>
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      {/* AI Chat */}
+      <ChatInterface />
 
       {/* Quick actions */}
       <div>
