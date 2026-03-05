@@ -1,19 +1,20 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Flame, Drumstick, Zap, Footprints, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ChatInterface from "@/components/ChatInterface";
 import somaLogo from "@/assets/soma-logo.png";
 
 const DEFAULT_TARGETS = { calories: 2000, protein: 100 };
+const DEFAULT_ACTIVITY_TARGET = 30; // minutes
 
 const Index = () => {
   const { user } = useAuth();
   const firstName = user?.user_metadata?.display_name?.split(" ")[0] || "there";
   const [totals, setTotals] = useState({ calories: 0, protein: 0, workoutMin: 0, caloriesBurned: 0 });
   const [targets, setTargets] = useState(DEFAULT_TARGETS);
+  const [activityTarget, setActivityTarget] = useState(DEFAULT_ACTIVITY_TARGET);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -34,7 +35,7 @@ const Index = () => {
         .gte("created_at", todayStart.toISOString()),
       supabase
         .from("goals")
-        .select("target_calories, target_protein")
+        .select("*")
         .eq("user_id", user.id)
         .eq("is_active", true)
         .limit(1),
@@ -48,11 +49,15 @@ const Index = () => {
         caloriesBurned: workouts.reduce((s, w) => s + (w.calories_burned || 0), 0),
       });
       if (goalsRes.data?.[0]) {
-        const g = goalsRes.data[0];
+        const g = goalsRes.data[0] as any;
         setTargets({
           calories: g.target_calories || DEFAULT_TARGETS.calories,
           protein: g.target_protein || DEFAULT_TARGETS.protein,
         });
+        // Derive daily activity target from exercise_days_per_week
+        const exDays = g.exercise_days_per_week ?? 3;
+        // Scale: more exercise days = higher daily target expectation
+        setActivityTarget(Math.round(30 + (exDays - 3) * 5));
       }
       setLoaded(true);
     });
@@ -63,15 +68,10 @@ const Index = () => {
     if (!loaded) return null;
     const calPct = Math.min(totals.calories / targets.calories, 1);
     const proPct = Math.min(totals.protein / targets.protein, 1);
-    const actPct = Math.min(totals.workoutMin / 30, 1);
-    const calScore = calPct * 4;
-    const proScore = proPct * 3;
-    const actScore = actPct * 3;
+    const actPct = Math.min(totals.workoutMin / activityTarget, 1);
     return {
-      total: Math.round((calScore + proScore + actScore) * 10) / 10,
-      calPct,
-      proPct,
-      actPct,
+      total: Math.round((calPct * 4 + proPct * 3 + actPct * 3) * 10) / 10,
+      calPct, proPct, actPct,
     };
   };
   const scoreData = calcScore();
@@ -88,15 +88,11 @@ const Index = () => {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-4 flex flex-col h-[calc(100dvh-5rem)] md:h-[calc(100dvh-1rem)] space-y-3">
-      {/* Logo centered */}
       <div className="flex justify-center">
         <img src={somaLogo} alt="SOMA" className="h-20 w-auto" />
       </div>
-
-      {/* Today label — matches tab trigger font */}
       <p className="text-sm font-medium">Today</p>
 
-      {/* Score card */}
       {loaded && scoreData && (
         <Card>
           <CardContent className="flex items-center gap-3 p-3">
@@ -114,7 +110,6 @@ const Index = () => {
         </Card>
       )}
 
-      {/* Daily summary cards — compact */}
       <div className="grid grid-cols-4 gap-2">
         <Card className="bg-primary/5 border-primary/10">
           <CardContent className="flex flex-col items-center gap-1 p-2.5">
@@ -146,7 +141,6 @@ const Index = () => {
         </Card>
       </div>
 
-      {/* AI Chat — fills remaining space */}
       <Card className="border-border/50 flex-1 min-h-0 flex flex-col">
         <CardContent className="p-4 flex-1 min-h-0 flex flex-col">
           <ChatInterface />
