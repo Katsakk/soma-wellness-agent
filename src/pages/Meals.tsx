@@ -3,11 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, UtensilsCrossed, Flame, Drumstick, Wheat, Droplets, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
+import TodayMealsView from "@/components/meals/TodayMealsView";
+import WeeklyMealsView from "@/components/meals/WeeklyMealsView";
+import MonthlyMealsView from "@/components/meals/MonthlyMealsView";
 
 interface MacroEstimate {
   name: string;
@@ -28,32 +32,59 @@ interface Meal {
   notes: string | null;
 }
 
+const DEFAULT_TARGETS = { calories: 2000, protein: 100, carbs: 250, fats: 67 };
+
 const Meals = () => {
   const { user } = useAuth();
-  const [meals, setMeals] = useState<Meal[]>([]);
+  const [todayMeals, setTodayMeals] = useState<Meal[]>([]);
+  const [allMeals, setAllMeals] = useState<Meal[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [description, setDescription] = useState("");
   const [estimating, setEstimating] = useState(false);
   const [estimate, setEstimate] = useState<MacroEstimate | null>(null);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState("today");
+  const [targets, setTargets] = useState(DEFAULT_TARGETS);
 
   const fetchMeals = async () => {
     if (!user) return;
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const monthStart = subDays(new Date(), 30);
 
-    const { data, error } = await supabase
-      .from("meals")
-      .select("*")
-      .eq("user_id", user.id)
-      .gte("meal_time", todayStart.toISOString())
-      .order("meal_time", { ascending: false });
+    const [todayRes, allRes, goalsRes] = await Promise.all([
+      supabase
+        .from("meals")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("meal_time", todayStart.toISOString())
+        .order("meal_time", { ascending: false }),
+      supabase
+        .from("meals")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("meal_time", monthStart.toISOString())
+        .order("meal_time", { ascending: false }),
+      supabase
+        .from("goals")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .limit(1),
+    ]);
 
-    if (error) {
-      console.error("Failed to fetch meals:", error);
-    } else {
-      setMeals(data || []);
+    setTodayMeals(todayRes.data || []);
+    setAllMeals(allRes.data || []);
+
+    if (goalsRes.data?.[0]) {
+      const g = goalsRes.data[0];
+      setTargets({
+        calories: g.target_calories || DEFAULT_TARGETS.calories,
+        protein: g.target_protein || DEFAULT_TARGETS.protein,
+        carbs: g.target_carbs || DEFAULT_TARGETS.carbs,
+        fats: g.target_fats || DEFAULT_TARGETS.fats,
+      });
     }
     setLoading(false);
   };
@@ -112,20 +143,11 @@ const Meals = () => {
     if (error) {
       toast.error("Failed to delete meal");
     } else {
-      setMeals((prev) => prev.filter((m) => m.id !== id));
+      setTodayMeals((prev) => prev.filter((m) => m.id !== id));
+      setAllMeals((prev) => prev.filter((m) => m.id !== id));
       toast.success("Meal deleted");
     }
   };
-
-  const totals = meals.reduce(
-    (acc, m) => ({
-      calories: acc.calories + (m.calories || 0),
-      protein: acc.protein + (m.protein || 0),
-      carbs: acc.carbs + (m.carbs || 0),
-      fats: acc.fats + (m.fats || 0),
-    }),
-    { calories: 0, protein: 0, carbs: 0, fats: 0 }
-  );
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
@@ -186,68 +208,91 @@ const Meals = () => {
         </Dialog>
       </div>
 
-      {/* Today's totals */}
-      {meals.length > 0 && (
-        <div className="grid grid-cols-4 gap-2">
-          <MiniStat icon={Flame} label="Calories" value={totals.calories} unit="kcal" />
-          <MiniStat icon={Drumstick} label="Protein" value={totals.protein} unit="g" />
-          <MiniStat icon={Wheat} label="Carbs" value={totals.carbs} unit="g" />
-          <MiniStat icon={Droplets} label="Fats" value={totals.fats} unit="g" />
-        </div>
-      )}
+      {/* Time period tabs */}
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="w-full">
+          <TabsTrigger value="today" className="flex-1">Today</TabsTrigger>
+          <TabsTrigger value="weekly" className="flex-1">Weekly</TabsTrigger>
+          <TabsTrigger value="monthly" className="flex-1">Monthly</TabsTrigger>
+        </TabsList>
 
-      {/* Meal list */}
-      {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : meals.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="rounded-xl bg-muted p-4 mb-4">
-              <UtensilsCrossed className="h-8 w-8 text-muted-foreground" />
+        <TabsContent value="today" className="mt-4 space-y-4">
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-            <h3 className="font-semibold">No meals logged today</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Describe what you ate and AI will estimate the macros
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {meals.map((meal) => (
-            <Card key={meal.id} className="group">
-              <CardContent className="flex items-center justify-between p-4">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm truncate">{meal.name}</p>
-                  <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                    <span>{meal.calories ?? 0} kcal</span>
-                    <span>{meal.protein ?? 0}g P</span>
-                    <span>{meal.carbs ?? 0}g C</span>
-                    <span>{meal.fats ?? 0}g F</span>
-                  </div>
-                  {meal.notes && (
-                    <p className="text-xs text-muted-foreground mt-1 truncate italic">"{meal.notes}"</p>
-                  )}
+          ) : todayMeals.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="rounded-xl bg-muted p-4 mb-4">
+                  <UtensilsCrossed className="h-8 w-8 text-muted-foreground" />
                 </div>
-                <div className="flex items-center gap-2 shrink-0 ml-3">
-                  <span className="text-xs text-muted-foreground">
-                    {format(new Date(meal.meal_time), "h:mm a")}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => handleDelete(meal.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                </div>
+                <h3 className="font-semibold">No meals logged today</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Describe what you ate and AI will estimate the macros
+                </p>
               </CardContent>
             </Card>
-          ))}
-        </div>
-      )}
+          ) : (
+            <>
+              <TodayMealsView meals={todayMeals} targets={targets} />
+              <div className="space-y-2">
+                {todayMeals.map((meal) => (
+                  <Card key={meal.id} className="group">
+                    <CardContent className="flex items-center justify-between p-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm truncate">{meal.name}</p>
+                        <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                          <span>{meal.calories ?? 0} kcal</span>
+                          <span>{meal.protein ?? 0}g P</span>
+                          <span>{meal.carbs ?? 0}g C</span>
+                          <span>{meal.fats ?? 0}g F</span>
+                        </div>
+                        {meal.notes && (
+                          <p className="text-xs text-muted-foreground mt-1 truncate italic">"{meal.notes}"</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(meal.meal_time), "h:mm a")}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleDelete(meal.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="weekly" className="mt-4">
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <WeeklyMealsView meals={allMeals} />
+          )}
+        </TabsContent>
+
+        <TabsContent value="monthly" className="mt-4">
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <MonthlyMealsView meals={allMeals} />
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
@@ -262,16 +307,6 @@ function MacroCard({ icon: Icon, label, value, unit, color }: { icon: any; label
           {value} <span className="text-xs font-normal text-muted-foreground">{unit}</span>
         </p>
       </div>
-    </div>
-  );
-}
-
-function MiniStat({ icon: Icon, label, value, unit }: { icon: any; label: string; value: number; unit: string }) {
-  return (
-    <div className="rounded-lg bg-muted/50 p-2.5 text-center">
-      <Icon className="h-3.5 w-3.5 mx-auto text-muted-foreground mb-1" />
-      <p className="text-sm font-bold">{Math.round(value)}</p>
-      <p className="text-[10px] text-muted-foreground">{unit}</p>
     </div>
   );
 }
