@@ -204,14 +204,16 @@ const Index = () => {
       </Card>
 
       {/* Conversation list */}
-      <ConversationList
-        conversations={conversations}
-        activeId={activeId}
-        onSelect={setActiveId}
-        onCreate={() => createConversation()}
-        onDelete={deleteConversation}
-        onRename={renameConversation}
-      />
+      <div className="flex-shrink-0">
+        <ConversationList
+          conversations={conversations}
+          activeId={activeId}
+          onSelect={setActiveId}
+          onCreate={() => createConversation()}
+          onDelete={deleteConversation}
+          onRename={renameConversation}
+        />
+      </div>
     </div>
   );
 };
