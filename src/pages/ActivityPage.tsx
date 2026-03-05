@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import WeeklyActivityView from "@/components/activity/WeeklyActivityView";
 import MonthlyActivityView from "@/components/activity/MonthlyActivityView";
 import SyncWorkoutsDialog from "@/components/activity/SyncWorkoutsDialog";
+import TodayActivitySummary from "@/components/activity/TodayActivitySummary";
 
 interface Workout {
   id: string;
@@ -165,7 +166,10 @@ const ActivityPage = () => {
               </CardContent>
             </Card>
           ) : (
-            <WorkoutList workouts={todayWorkouts} />
+            <>
+              <TodayActivitySummary workouts={todayWorkouts} />
+              <WorkoutList workouts={todayWorkouts} />
+            </>
           )}
         </TabsContent>
 
