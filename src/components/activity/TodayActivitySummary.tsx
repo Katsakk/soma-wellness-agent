@@ -39,9 +39,9 @@ const TodayActivitySummary = ({ workouts }: TodayActivitySummaryProps) => {
   const workoutCount = workouts.length;
 
   const progress = Math.min(totalCalories / burnTarget, 1);
-  const size = 220;
+  const size = 240;
   const strokeWidth = 16;
-  const radius = (size - strokeWidth) / 2 - 10;
+  const radius = (size - strokeWidth) / 2 - 16;
   const center = size / 2;
   const startAngle = 120;
   const sweepAngle = 300;
@@ -104,11 +104,11 @@ const TodayActivitySummary = ({ workouts }: TodayActivitySummaryProps) => {
               <path d={describeArc(startAngle, endAngle)} fill="none" stroke="hsl(var(--muted))" strokeWidth={strokeWidth} strokeLinecap="round" />
               {progress > 0.01 && <path d={describeArc(startAngle, progressAngle)} fill="none" stroke="hsl(var(--primary))" strokeWidth={strokeWidth} strokeLinecap="round" />}
               <g transform={`translate(${center}, ${center})`}>
-                <g transform="translate(-12, -46)"><Flame width={24} height={24} stroke="hsl(var(--primary))" fill="hsl(var(--primary))" opacity={0.85} /></g>
-                <text textAnchor="middle" y={0} className="fill-foreground" style={{ fontSize: "36px", fontWeight: 700 }}>{totalCalories}</text>
-                <text textAnchor="middle" y={18} className="fill-muted-foreground" style={{ fontSize: "12px" }}>Burned</text>
+                <g transform="translate(-12, -50)"><Flame width={24} height={24} stroke="hsl(var(--primary))" fill="hsl(var(--primary))" opacity={0.85} /></g>
+                <text textAnchor="middle" y={-4} className="fill-foreground" style={{ fontSize: "36px", fontWeight: 700 }}>{totalCalories}</text>
+                <text textAnchor="middle" y={16} className="fill-muted-foreground" style={{ fontSize: "12px" }}>Burned</text>
               </g>
-              {(() => { const endPos = polarToCartesian(endAngle); return <text x={endPos.x + 14} y={endPos.y + 4} className="fill-muted-foreground" style={{ fontSize: "11px", fontWeight: 500 }}>{burnTarget.toLocaleString()}</text>; })()}
+              {(() => { const endPos = polarToCartesian(endAngle); return <text x={endPos.x + 8} y={endPos.y + 4} className="fill-muted-foreground" style={{ fontSize: "11px", fontWeight: 500 }}>{burnTarget.toLocaleString()}</text>; })()}
             </svg>
           </div>
           <div className="flex items-center gap-0 pt-2">
