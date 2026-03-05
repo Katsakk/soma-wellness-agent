@@ -105,28 +105,41 @@ const Index = () => {
       </div>
       <p className="text-sm font-medium">Today's Snapshot</p>
 
-      {loaded && scoreData && (
-        <Card>
-          <CardContent className="p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold">Daily Score</p>
-              <span className="text-lg font-bold">{scoreData.total}<span className="text-xs font-normal text-muted-foreground"> / 10</span></span>
-            </div>
-            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-              <div className="h-full rounded-full bg-foreground/70 transition-all duration-500" style={{ width: `${(scoreData.total / 10) * 100}%` }} />
-            </div>
-            <p className="text-xs text-muted-foreground">{insight.tip}</p>
-            <ul className="space-y-0.5">
-              {insight.details.map((d, i) => (
-                <li key={i} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
-                  <span className="mt-1 h-1 w-1 rounded-full bg-muted-foreground/50 shrink-0" />
-                  {d}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
+      {loaded && scoreData && (() => {
+        const pct = scoreData.total / 10;
+        const r = 28;
+        const circ = 2 * Math.PI * r;
+        const offset = circ * (1 - pct);
+        return (
+          <Card>
+            <CardContent className="p-3 flex items-start gap-4">
+              <div className="shrink-0 relative" style={{ width: 68, height: 68 }}>
+                <svg width={68} height={68} viewBox="0 0 68 68">
+                  <circle cx={34} cy={34} r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth={5} />
+                  <circle cx={34} cy={34} r={r} fill="none" stroke="hsl(var(--foreground))" strokeWidth={5}
+                    strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset}
+                    transform="rotate(-90 34 34)" className="transition-all duration-700" />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-base font-bold leading-none">{scoreData.total}</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <p className="text-sm font-semibold">Daily Score <span className="text-xs font-normal text-muted-foreground">/ 10</span></p>
+                <p className="text-xs text-muted-foreground">{insight.tip}</p>
+                <ul className="space-y-0.5">
+                  {insight.details.map((d, i) => (
+                    <li key={i} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                      <span className="mt-1 h-1 w-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                      {d}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <div className="grid grid-cols-4 gap-2">
         <Card className="bg-primary/5 border-primary/10">
