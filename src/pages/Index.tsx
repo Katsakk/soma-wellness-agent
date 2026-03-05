@@ -59,12 +59,30 @@ const Index = () => {
   // Score out of 10 — weighted: calories 4pts, protein 3pts, activity 3pts
   const calcScore = () => {
     if (!loaded) return null;
-    const calScore = Math.min(totals.calories / targets.calories, 1) * 4;
-    const proScore = Math.min(totals.protein / targets.protein, 1) * 3;
-    const actScore = Math.min(totals.workoutMin / 30, 1) * 3; // 30min target
-    return Math.round((calScore + proScore + actScore) * 10) / 10;
+    const calPct = Math.min(totals.calories / targets.calories, 1);
+    const proPct = Math.min(totals.protein / targets.protein, 1);
+    const actPct = Math.min(totals.workoutMin / 30, 1);
+    const calScore = calPct * 4;
+    const proScore = proPct * 3;
+    const actScore = actPct * 3;
+    return {
+      total: Math.round((calScore + proScore + actScore) * 10) / 10,
+      calPct,
+      proPct,
+      actPct,
+    };
   };
-  const score = calcScore();
+  const scoreData = calcScore();
+
+  const getScoreTip = () => {
+    if (!scoreData) return "";
+    const weak: string[] = [];
+    if (scoreData.calPct < 0.5) weak.push("log more meals");
+    if (scoreData.proPct < 0.5) weak.push("eat more protein");
+    if (scoreData.actPct < 0.5) weak.push("get a workout in");
+    if (weak.length === 0) return "Great job today! Keep it up 💪";
+    return `To improve, ${weak.join(" and ")}.`;
+  };
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
@@ -73,17 +91,26 @@ const Index = () => {
         <p className="text-muted-foreground text-sm mt-1">Here's your health snapshot for today.</p>
       </div>
 
-      {/* Today header with score */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">Today</h2>
-        {loaded && score !== null && (
-          <div className="flex items-center gap-1.5 rounded-full border bg-card px-3 py-1">
-            <Star className="h-3.5 w-3.5 text-warning fill-warning" />
-            <span className="text-sm font-bold">{score}</span>
-            <span className="text-[10px] text-muted-foreground">/ 10</span>
-          </div>
-        )}
-      </div>
+      {/* Today label — matches tab trigger font */}
+      <p className="text-sm font-medium">Today</p>
+
+      {/* Score card */}
+      {loaded && scoreData && (
+        <Card>
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex items-center justify-center rounded-xl bg-warning/10 h-14 w-14 shrink-0">
+              <div className="text-center">
+                <Star className="h-4 w-4 text-warning fill-warning mx-auto mb-0.5" />
+                <span className="text-lg font-bold leading-none">{scoreData.total}</span>
+              </div>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Daily Score <span className="text-muted-foreground font-normal">/ 10</span></p>
+              <p className="text-xs text-muted-foreground mt-0.5">{getScoreTip()}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Daily summary cards */}
       <div className="grid grid-cols-2 gap-3">
