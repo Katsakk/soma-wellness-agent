@@ -7,6 +7,33 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Extract plain text from a message's content (string or multimodal array) */
+function getTextContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c: any) => c.type === "text")
+      .map((c: any) => c.text)
+      .join(" ");
+  }
+  return "";
+}
+
+/** Check if a message has images */
+function hasImages(content: unknown): boolean {
+  if (!Array.isArray(content)) return false;
+  return content.some((c: any) => c.type === "image_url");
+}
+
+/** Extract image URLs from message content */
+function getImageUrls(content: unknown): string[] {
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((c: any) => c.type === "image_url")
+    .map((c: any) => c.image_url?.url)
+    .filter(Boolean);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -15,7 +42,6 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Authenticate user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -58,7 +84,6 @@ serve(async (req) => {
     const memories = memoryRes.data || [];
     const displayName = profileRes.data?.[0]?.display_name || "User";
 
-    // Calculate today's macro totals
     const todayTotals = todayMeals.reduce(
       (acc, m) => ({
         calories: acc.calories + (m.calories || 0),
@@ -87,17 +112,32 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
 
 ## Guidelines
 - Reference their actual data when answering questions about nutrition, activity, or progress.
+- When the user shares a food photo (plate, menu, fridge, grocery items), carefully analyze the image to identify ALL visible food items, estimate portions and serving sizes, and provide a detailed macro breakdown. Be specific about what you see.
+- For restaurant menus, identify items the user might be interested in and provide nutritional estimates.
+- For fridge or pantry photos, suggest meals based on visible ingredients with estimated macros.
+- When a user tells you about food they ate (text or image), confirm you've logged it for them.
 - When data is missing, suggest they log meals or connect integrations.
 - For workout generation, ask about available time, equipment, and location if not specified.
 - Be encouraging but honest about gaps in their routine.
-- Keep responses under 300 words unless the user asks for detail.
-- When a user tells you about food they ate, confirm you've logged it for them.`;
+- Keep responses under 300 words unless the user asks for detail.`;
 
-    // Extract the last user message for meal detection
-    const lastUserMessage = messages.filter((m: { role: string }) => m.role === "user").pop()?.content || "";
+    // Get last user message for meal extraction
+    const lastUserMsg = messages[messages.length - 1];
+    const lastUserText = getTextContent(lastUserMsg?.content || "");
+    const lastUserImages = getImageUrls(lastUserMsg?.content || "");
+    const messageHasImages = lastUserImages.length > 0;
 
-    // Fire meal extraction in parallel with the chat response (non-blocking)
-    const mealExtractionPromise = extractAndLogMeal(lastUserMessage, userId, supabase, LOVABLE_API_KEY);
+    // Fire meal extraction in parallel (non-blocking)
+    const mealExtractionPromise = extractAndLogMeal(
+      lastUserText,
+      lastUserImages,
+      userId,
+      supabase,
+      LOVABLE_API_KEY
+    );
+
+    // Use a vision-capable model when images are present
+    const model = messageHasImages ? "google/gemini-2.5-flash" : "google/gemini-3-flash-preview";
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -106,16 +146,15 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model,
         messages: [{ role: "system", content: systemPrompt }, ...messages],
         stream: true,
       }),
     });
 
     if (!response.ok) {
-      // Wait for extraction to finish before returning error
       await mealExtractionPromise.catch(() => {});
-      
+
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
           status: 429,
@@ -136,12 +175,9 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
       });
     }
 
-    // Create a transform stream that passes through the chat response
-    // and waits for meal extraction to complete
     const { readable, writable } = new TransformStream();
     const writer = writable.getWriter();
 
-    // Pipe the response body through, and after it's done, ensure meal extraction completes
     (async () => {
       try {
         const reader = response.body!.getReader();
@@ -153,7 +189,6 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
       } catch (e) {
         console.error("Stream error:", e);
       } finally {
-        // Wait for meal extraction to finish before closing
         await mealExtractionPromise.catch((e) => console.error("Meal extraction error:", e));
         await writer.close();
       }
@@ -172,14 +207,43 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
 });
 
 async function extractAndLogMeal(
-  userMessage: string,
+  userText: string,
+  imageUrls: string[],
   userId: string,
   supabase: ReturnType<typeof createClient>,
   apiKey: string
 ) {
-  if (!userMessage || userMessage.length < 3) return;
+  if (!userText && imageUrls.length === 0) return;
 
   try {
+    // Build multimodal content for extraction
+    const extractionContent: any[] = [];
+
+    const promptText = imageUrls.length > 0
+      ? `Analyze the image(s) and the user's message to identify food items. The image could be a plate of food, a restaurant menu, a fridge, or grocery items. Identify ALL food items visible, estimate portions, and calculate macros.
+
+User message: "${userText || "(no text, just the image)"}"
+
+If food is detected, return JSON: {"is_meal": true, "name": "descriptive meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
+If NOT food-related, return: {"is_meal": false}
+Return ONLY valid JSON, no markdown.`
+      : `Analyze the user's message. If they are describing food they ate or are eating, extract meal info with estimated macros. If NOT about food, return {"is_meal": false}.
+
+User message: "${userText}"
+
+If meal detected: {"is_meal": true, "name": "descriptive meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
+If NOT a meal: {"is_meal": false}
+Return ONLY valid JSON, no markdown.`;
+
+    extractionContent.push({ type: "text", text: promptText });
+
+    for (const url of imageUrls) {
+      extractionContent.push({ type: "image_url", image_url: { url } });
+    }
+
+    // Use vision model when images are present
+    const model = imageUrls.length > 0 ? "google/gemini-2.5-flash" : "google/gemini-2.5-flash-lite";
+
     const extractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -187,25 +251,11 @@ async function extractAndLogMeal(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
+        model,
         messages: [
           {
-            role: "system",
-            content: `You are a meal extraction assistant. Analyze the user's message and determine if they are describing food they ate, are eating, or plan to eat. If yes, extract meal details with estimated macros. If the message is NOT about food/eating (e.g. asking questions, discussing workouts, general chat), return {"is_meal": false}.
-
-Return ONLY valid JSON, no markdown formatting, no code blocks. Use one of these formats:
-
-If meal detected:
-{"is_meal": true, "name": "descriptive meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
-
-If NOT a meal:
-{"is_meal": false}
-
-Be accurate with macro estimates. Use common nutritional databases as reference.`,
-          },
-          {
             role: "user",
-            content: userMessage,
+            content: imageUrls.length > 0 ? extractionContent : promptText,
           },
         ],
         temperature: 0.1,
@@ -221,7 +271,6 @@ Be accurate with macro estimates. Use common nutritional databases as reference.
     const content = extractionData.choices?.[0]?.message?.content?.trim();
     if (!content) return;
 
-    // Clean potential markdown code blocks
     const cleanedContent = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
     let parsed;
@@ -234,7 +283,6 @@ Be accurate with macro estimates. Use common nutritional databases as reference.
 
     if (!parsed.is_meal) return;
 
-    // Insert the meal
     const { error } = await supabase.from("meals").insert({
       user_id: userId,
       name: parsed.name || "Unnamed meal",
@@ -249,7 +297,7 @@ Be accurate with macro estimates. Use common nutritional databases as reference.
     if (error) {
       console.error("Failed to insert meal:", error);
     } else {
-      console.log("Auto-logged meal from chat:", parsed.name);
+      console.log("Auto-logged meal:", parsed.name);
     }
   } catch (e) {
     console.error("Meal extraction error:", e);

@@ -1,4 +1,27 @@
-export type ChatMessage = { role: "user" | "assistant"; content: string };
+export type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  images?: string[]; // base64 data URLs for display
+};
+
+type ApiContent =
+  | string
+  | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+
+function toApiMessages(messages: ChatMessage[]): { role: string; content: ApiContent }[] {
+  return messages.map((msg) => {
+    if (msg.images?.length) {
+      return {
+        role: msg.role,
+        content: [
+          { type: "text" as const, text: msg.content || "What food is in this image? Identify all items and estimate macros." },
+          ...msg.images.map((url) => ({ type: "image_url" as const, image_url: { url } })),
+        ],
+      };
+    }
+    return { role: msg.role, content: msg.content };
+  });
+}
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
@@ -22,7 +45,7 @@ export async function streamChat({
       Authorization: `Bearer ${accessToken}`,
       apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
     },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages: toApiMessages(messages) }),
   });
 
   if (!resp.ok) {
@@ -72,7 +95,6 @@ export async function streamChat({
     }
   }
 
-  // Flush remaining buffer
   if (buffer.trim()) {
     for (let raw of buffer.split("\n")) {
       if (!raw) continue;
