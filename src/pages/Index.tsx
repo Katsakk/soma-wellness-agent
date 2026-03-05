@@ -89,7 +89,7 @@ const Index = () => {
     <div className="mx-auto max-w-2xl px-4 py-4 flex flex-col h-[calc(100dvh-5rem)] md:h-[calc(100dvh-1rem)] space-y-3">
       {/* Logo centered */}
       <div className="flex justify-center">
-        <img src={somaLogo} alt="SOMA" className="h-12 w-auto" />
+        <img src={somaLogo} alt="SOMA" className="h-20 w-auto" />
       </div>
 
       {/* Today label — matches tab trigger font */}
