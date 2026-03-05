@@ -90,7 +90,14 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
 - When data is missing, suggest they log meals or connect integrations.
 - For workout generation, ask about available time, equipment, and location if not specified.
 - Be encouraging but honest about gaps in their routine.
-- Keep responses under 300 words unless the user asks for detail.`;
+- Keep responses under 300 words unless the user asks for detail.
+- When a user tells you about food they ate, confirm you've logged it for them.`;
+
+    // Extract the last user message for meal detection
+    const lastUserMessage = messages.filter((m: { role: string }) => m.role === "user").pop()?.content || "";
+
+    // Fire meal extraction in parallel with the chat response (non-blocking)
+    const mealExtractionPromise = extractAndLogMeal(lastUserMessage, userId, supabase, LOVABLE_API_KEY);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -106,6 +113,9 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
     });
 
     if (!response.ok) {
+      // Wait for extraction to finish before returning error
+      await mealExtractionPromise.catch(() => {});
+      
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
           status: 429,
@@ -126,7 +136,30 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
       });
     }
 
-    return new Response(response.body, {
+    // Create a transform stream that passes through the chat response
+    // and waits for meal extraction to complete
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+
+    // Pipe the response body through, and after it's done, ensure meal extraction completes
+    (async () => {
+      try {
+        const reader = response.body!.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          await writer.write(value);
+        }
+      } catch (e) {
+        console.error("Stream error:", e);
+      } finally {
+        // Wait for meal extraction to finish before closing
+        await mealExtractionPromise.catch((e) => console.error("Meal extraction error:", e));
+        await writer.close();
+      }
+    })();
+
+    return new Response(readable, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
@@ -137,3 +170,88 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
     });
   }
 });
+
+async function extractAndLogMeal(
+  userMessage: string,
+  userId: string,
+  supabase: ReturnType<typeof createClient>,
+  apiKey: string
+) {
+  if (!userMessage || userMessage.length < 3) return;
+
+  try {
+    const extractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [
+          {
+            role: "system",
+            content: `You are a meal extraction assistant. Analyze the user's message and determine if they are describing food they ate, are eating, or plan to eat. If yes, extract meal details with estimated macros. If the message is NOT about food/eating (e.g. asking questions, discussing workouts, general chat), return {"is_meal": false}.
+
+Return ONLY valid JSON, no markdown formatting, no code blocks. Use one of these formats:
+
+If meal detected:
+{"is_meal": true, "name": "descriptive meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
+
+If NOT a meal:
+{"is_meal": false}
+
+Be accurate with macro estimates. Use common nutritional databases as reference.`,
+          },
+          {
+            role: "user",
+            content: userMessage,
+          },
+        ],
+        temperature: 0.1,
+      }),
+    });
+
+    if (!extractionResponse.ok) {
+      console.error("Meal extraction API error:", extractionResponse.status);
+      return;
+    }
+
+    const extractionData = await extractionResponse.json();
+    const content = extractionData.choices?.[0]?.message?.content?.trim();
+    if (!content) return;
+
+    // Clean potential markdown code blocks
+    const cleanedContent = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleanedContent);
+    } catch {
+      console.error("Failed to parse meal extraction JSON:", cleanedContent);
+      return;
+    }
+
+    if (!parsed.is_meal) return;
+
+    // Insert the meal
+    const { error } = await supabase.from("meals").insert({
+      user_id: userId,
+      name: parsed.name || "Unnamed meal",
+      calories: parsed.calories || null,
+      protein: parsed.protein || null,
+      carbs: parsed.carbs || null,
+      fats: parsed.fats || null,
+      source: "ai_estimate",
+      meal_time: new Date().toISOString(),
+    });
+
+    if (error) {
+      console.error("Failed to insert meal:", error);
+    } else {
+      console.log("Auto-logged meal from chat:", parsed.name);
+    }
+  } catch (e) {
+    console.error("Meal extraction error:", e);
+  }
+}
