@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Flame, Drumstick, Moon, Footprints, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ChatInterface from "@/components/ChatInterface";
+import somaLogo from "@/assets/soma-logo.png";
 
 const DEFAULT_TARGETS = { calories: 2000, protein: 100 };
 
@@ -86,9 +87,9 @@ const Index = () => {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Hey {firstName} 👋</h1>
-        <p className="text-muted-foreground text-sm mt-1">Here's your health snapshot for today.</p>
+      {/* Logo centered */}
+      <div className="flex justify-center pt-2">
+        <img src={somaLogo} alt="SOMA" className="h-10 w-auto" />
       </div>
 
       {/* Today label — matches tab trigger font */}
