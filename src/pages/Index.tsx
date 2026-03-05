@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Flame, Drumstick, Moon, Footprints, UtensilsCrossed, Dumbbell, RefreshCw } from "lucide-react";
+import { Flame, Drumstick, Moon, Footprints } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ChatInterface from "@/components/ChatInterface";
 
@@ -91,24 +91,6 @@ const Index = () => {
       {/* AI Chat */}
       <ChatInterface />
 
-      {/* Quick actions */}
-      <div>
-        <h2 className="text-sm font-medium text-muted-foreground mb-3">Quick actions</h2>
-        <div className="grid grid-cols-3 gap-3">
-          <Button variant="outline" className="h-auto flex-col gap-2 py-4">
-            <UtensilsCrossed className="h-5 w-5" />
-            <span className="text-xs">Log meal</span>
-          </Button>
-          <Button variant="outline" className="h-auto flex-col gap-2 py-4">
-            <Dumbbell className="h-5 w-5" />
-            <span className="text-xs">Workout</span>
-          </Button>
-          <Button variant="outline" className="h-auto flex-col gap-2 py-4">
-            <RefreshCw className="h-5 w-5" />
-            <span className="text-xs">Sync</span>
-          </Button>
-        </div>
-      </div>
     </div>
   );
 };
