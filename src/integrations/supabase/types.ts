@@ -40,9 +40,11 @@ export type Database = {
       }
       goals: {
         Row: {
+          age: number | null
           created_at: string
           current_weight: number | null
           exercise_days_per_week: number | null
+          gender: string | null
           goal_type: string
           height: number | null
           id: string
@@ -56,9 +58,11 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          age?: number | null
           created_at?: string
           current_weight?: number | null
           exercise_days_per_week?: number | null
+          gender?: string | null
           goal_type: string
           height?: number | null
           id?: string
@@ -72,9 +76,11 @@ export type Database = {
           user_id: string
         }
         Update: {
+          age?: number | null
           created_at?: string
           current_weight?: number | null
           exercise_days_per_week?: number | null
+          gender?: string | null
           goal_type?: string
           height?: number | null
           id?: string

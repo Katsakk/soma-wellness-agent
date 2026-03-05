@@ -14,9 +14,14 @@ const GOAL_TYPES = [
   { value: "muscle_gain", label: "Muscle Gain", emoji: "🏋️" },
 ];
 
+const GENDER_OPTIONS = [
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+];
+
 const EXERCISE_DAYS = [1, 2, 3, 4, 5, 6, 7];
 
-interface GoalsData {
+export interface GoalsData {
   goal_type: string;
   target_calories: string;
   target_protein: string;
@@ -26,6 +31,8 @@ interface GoalsData {
   current_weight: string;
   height: string;
   exercise_days_per_week: number;
+  gender: string;
+  age: string;
 }
 
 interface GoalsDialogProps {
@@ -37,10 +44,12 @@ interface GoalsDialogProps {
   onSaved: (data: GoalsData, goalId: string) => void;
 }
 
-function recommendMacros(goalType: string, currentWeight: number, height: number, exerciseDays: number) {
-  // Basic Mifflin-St Jeor estimation (assuming age ~30, adjustable)
-  // BMR rough estimate using weight(kg) and height(cm)
-  const bmr = 10 * currentWeight + 6.25 * height - 5 * 30 + 5; // male approx
+function recommendMacros(goalType: string, currentWeight: number, height: number, exerciseDays: number, gender: string, age: number) {
+  // Mifflin-St Jeor
+  const bmr = gender === "female"
+    ? 10 * currentWeight + 6.25 * height - 5 * age - 161
+    : 10 * currentWeight + 6.25 * height - 5 * age + 5;
+
   const activityMultiplier = 1.2 + (exerciseDays * 0.05);
   const tdee = Math.round(bmr * activityMultiplier);
 
@@ -52,28 +61,20 @@ function recommendMacros(goalType: string, currentWeight: number, height: number
   switch (goalType) {
     case "weight_loss":
       calories = tdee - 500;
-      proteinRatio = 0.35;
-      carbRatio = 0.35;
-      fatRatio = 0.30;
+      proteinRatio = 0.35; carbRatio = 0.35; fatRatio = 0.30;
       break;
     case "fat_burn":
       calories = tdee - 400;
-      proteinRatio = 0.40;
-      carbRatio = 0.30;
-      fatRatio = 0.30;
+      proteinRatio = 0.40; carbRatio = 0.30; fatRatio = 0.30;
       break;
     case "muscle_gain":
       calories = tdee + 300;
-      proteinRatio = 0.35;
-      carbRatio = 0.40;
-      fatRatio = 0.25;
+      proteinRatio = 0.35; carbRatio = 0.40; fatRatio = 0.25;
       break;
     case "maintenance":
     default:
       calories = tdee;
-      proteinRatio = 0.30;
-      carbRatio = 0.40;
-      fatRatio = 0.30;
+      proteinRatio = 0.30; carbRatio = 0.40; fatRatio = 0.30;
       break;
   }
 
@@ -99,19 +100,14 @@ function bmiCategory(bmi: number): { label: string; color: string } {
 }
 
 export default function GoalsDialog({ open, onOpenChange, userId, initialData, existingGoalId, onSaved }: GoalsDialogProps) {
-  const [goals, setGoals] = useState<GoalsData>(
-    initialData || {
-      goal_type: "maintenance",
-      target_calories: "",
-      target_protein: "",
-      target_carbs: "",
-      target_fats: "",
-      target_weight: "",
-      current_weight: "",
-      height: "",
-      exercise_days_per_week: 3,
-    }
-  );
+  const defaultData: GoalsData = {
+    goal_type: "maintenance",
+    target_calories: "", target_protein: "", target_carbs: "", target_fats: "",
+    target_weight: "", current_weight: "", height: "",
+    exercise_days_per_week: 3, gender: "male", age: "30",
+  };
+
+  const [goals, setGoals] = useState<GoalsData>(initialData || defaultData);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -119,19 +115,15 @@ export default function GoalsDialog({ open, onOpenChange, userId, initialData, e
   }, [initialData]);
 
   const bmi = useMemo(() => {
-    const w = parseFloat(goals.current_weight);
-    const h = parseFloat(goals.height);
-    return calcBMI(w, h);
+    return calcBMI(parseFloat(goals.current_weight), parseFloat(goals.height));
   }, [goals.current_weight, goals.height]);
 
   const handleRecommend = () => {
     const w = parseFloat(goals.current_weight);
     const h = parseFloat(goals.height);
-    if (!w || !h) {
-      toast.error("Enter current weight and height first");
-      return;
-    }
-    const rec = recommendMacros(goals.goal_type, w, h, goals.exercise_days_per_week);
+    const a = parseInt(goals.age) || 30;
+    if (!w || !h) { toast.error("Enter current weight and height first"); return; }
+    const rec = recommendMacros(goals.goal_type, w, h, goals.exercise_days_per_week, goals.gender, a);
     setGoals((prev) => ({
       ...prev,
       target_calories: rec.calories.toString(),
@@ -157,6 +149,8 @@ export default function GoalsDialog({ open, onOpenChange, userId, initialData, e
         current_weight: goals.current_weight ? parseFloat(goals.current_weight) : null,
         height: goals.height ? parseFloat(goals.height) : null,
         exercise_days_per_week: goals.exercise_days_per_week,
+        gender: goals.gender,
+        age: parseInt(goals.age) || 30,
       };
 
       if (existingGoalId) {
@@ -206,6 +200,37 @@ export default function GoalsDialog({ open, onOpenChange, userId, initialData, e
             </div>
           </div>
 
+          {/* Gender & Age */}
+          <div>
+            <Label className="text-xs text-muted-foreground">About You</Label>
+            <div className="flex gap-3 mt-2">
+              <div className="flex gap-2 flex-1">
+                {GENDER_OPTIONS.map((g) => (
+                  <button
+                    key={g.value}
+                    onClick={() => setGoals({ ...goals, gender: g.value })}
+                    className={`text-xs px-3 py-2 rounded-lg border transition-colors flex-1 ${
+                      goals.gender === g.value
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-card text-muted-foreground border-border hover:bg-muted"
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+              <div className="w-20">
+                <Input
+                  type="number"
+                  placeholder="Age"
+                  value={goals.age}
+                  onChange={(e) => setGoals({ ...goals, age: e.target.value })}
+                  className="text-center"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Exercise Days */}
           <div>
             <Label className="text-xs text-muted-foreground">Exercise Days per Week</Label>
@@ -232,41 +257,22 @@ export default function GoalsDialog({ open, onOpenChange, userId, initialData, e
             <div className="grid grid-cols-3 gap-3 mt-2">
               <div>
                 <Label className="text-[10px]">Current Weight (kg)</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  placeholder="75"
-                  value={goals.current_weight}
-                  onChange={(e) => setGoals({ ...goals, current_weight: e.target.value })}
-                />
+                <Input type="number" step="0.1" placeholder="75" value={goals.current_weight} onChange={(e) => setGoals({ ...goals, current_weight: e.target.value })} />
               </div>
               <div>
                 <Label className="text-[10px]">Target Weight (kg)</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  placeholder="70"
-                  value={goals.target_weight}
-                  onChange={(e) => setGoals({ ...goals, target_weight: e.target.value })}
-                />
+                <Input type="number" step="0.1" placeholder="70" value={goals.target_weight} onChange={(e) => setGoals({ ...goals, target_weight: e.target.value })} />
               </div>
               <div>
                 <Label className="text-[10px]">Height (cm)</Label>
-                <Input
-                  type="number"
-                  placeholder="175"
-                  value={goals.height}
-                  onChange={(e) => setGoals({ ...goals, height: e.target.value })}
-                />
+                <Input type="number" placeholder="175" value={goals.height} onChange={(e) => setGoals({ ...goals, height: e.target.value })} />
               </div>
             </div>
             {bmi && (
               <div className="mt-2 flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground">BMI:</span>
                 <span className="font-semibold">{bmi}</span>
-                <span className={`text-xs font-medium ${bmiCategory(bmi).color}`}>
-                  ({bmiCategory(bmi).label})
-                </span>
+                <span className={`text-xs font-medium ${bmiCategory(bmi).color}`}>({bmiCategory(bmi).label})</span>
               </div>
             )}
           </div>
@@ -283,39 +289,19 @@ export default function GoalsDialog({ open, onOpenChange, userId, initialData, e
             <div className="grid grid-cols-2 gap-3 mt-2">
               <div>
                 <Label className="text-[10px]">Calories (kcal)</Label>
-                <Input
-                  type="number"
-                  placeholder="2000"
-                  value={goals.target_calories}
-                  onChange={(e) => setGoals({ ...goals, target_calories: e.target.value })}
-                />
+                <Input type="number" placeholder="2000" value={goals.target_calories} onChange={(e) => setGoals({ ...goals, target_calories: e.target.value })} />
               </div>
               <div>
                 <Label className="text-[10px]">Protein (g)</Label>
-                <Input
-                  type="number"
-                  placeholder="100"
-                  value={goals.target_protein}
-                  onChange={(e) => setGoals({ ...goals, target_protein: e.target.value })}
-                />
+                <Input type="number" placeholder="100" value={goals.target_protein} onChange={(e) => setGoals({ ...goals, target_protein: e.target.value })} />
               </div>
               <div>
                 <Label className="text-[10px]">Carbs (g)</Label>
-                <Input
-                  type="number"
-                  placeholder="250"
-                  value={goals.target_carbs}
-                  onChange={(e) => setGoals({ ...goals, target_carbs: e.target.value })}
-                />
+                <Input type="number" placeholder="250" value={goals.target_carbs} onChange={(e) => setGoals({ ...goals, target_carbs: e.target.value })} />
               </div>
               <div>
                 <Label className="text-[10px]">Fats (g)</Label>
-                <Input
-                  type="number"
-                  placeholder="67"
-                  value={goals.target_fats}
-                  onChange={(e) => setGoals({ ...goals, target_fats: e.target.value })}
-                />
+                <Input type="number" placeholder="67" value={goals.target_fats} onChange={(e) => setGoals({ ...goals, target_fats: e.target.value })} />
               </div>
             </div>
           </div>
