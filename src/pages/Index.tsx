@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
-import { Flame, Drumstick, Zap, Footprints, Star } from "lucide-react";
+import { Flame, Drumstick, Zap, Footprints } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ChatInterface from "@/components/ChatInterface";
 import somaLogo from "@/assets/soma-logo.png";
@@ -76,36 +76,54 @@ const Index = () => {
   };
   const scoreData = calcScore();
 
-  const getScoreTip = () => {
-    if (!scoreData) return "";
-    const weak: string[] = [];
-    if (scoreData.calPct < 0.5) weak.push("log more meals");
-    if (scoreData.proPct < 0.5) weak.push("eat more protein");
-    if (scoreData.actPct < 0.5) weak.push("get a workout in");
-    if (weak.length === 0) return "Great job today! Keep it up 💪";
-    return `To improve, ${weak.join(" and ")}.`;
+  const getScoreInsight = () => {
+    if (!scoreData) return { tip: "", details: [] as string[] };
+    const details: string[] = [];
+    if (scoreData.calPct >= 0.8) details.push("Calorie intake is on track");
+    else if (scoreData.calPct >= 0.4) details.push("You're halfway on calories — log a meal to close the gap");
+    else details.push("Calorie intake is low — try logging your next meal");
+
+    if (scoreData.proPct >= 0.8) details.push("Protein goal nearly met");
+    else if (scoreData.proPct >= 0.4) details.push("Protein is behind — consider a high-protein snack");
+    else details.push("Protein is very low — prioritize protein-rich foods");
+
+    if (scoreData.actPct >= 0.8) details.push("Activity target almost reached");
+    else if (scoreData.actPct >= 0.4) details.push("Some activity logged — a short walk could help");
+    else details.push("No activity yet — even 15 minutes makes a difference");
+
+    const tip = scoreData.total >= 8 ? "You're having a great day!" :
+                scoreData.total >= 5 ? "Solid progress — a few tweaks will get you there." :
+                "Still early — small steps add up.";
+    return { tip, details };
   };
+  const insight = getScoreInsight();
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-4 flex flex-col h-[calc(100dvh-5rem)] md:h-[calc(100dvh-1rem)] space-y-3">
       <div className="flex justify-center">
         <img src={somaLogo} alt="SOMA" className="h-20 w-auto" />
       </div>
-      <p className="text-sm font-medium">Today</p>
+      <p className="text-sm font-medium">Today's Snapshot</p>
 
       {loaded && scoreData && (
         <Card>
-          <CardContent className="flex items-center gap-3 p-3">
-            <div className="flex items-center justify-center rounded-xl bg-warning/10 h-12 w-12 shrink-0">
-              <div className="text-center">
-                <Star className="h-3.5 w-3.5 text-warning fill-warning mx-auto mb-0.5" />
-                <span className="text-base font-bold leading-none">{scoreData.total}</span>
-              </div>
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold">Daily Score</p>
+              <span className="text-lg font-bold">{scoreData.total}<span className="text-xs font-normal text-muted-foreground"> / 10</span></span>
             </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold">Daily Score <span className="text-muted-foreground font-normal">/ 10</span></p>
-              <p className="text-xs text-muted-foreground mt-0.5">{getScoreTip()}</p>
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+              <div className="h-full rounded-full bg-foreground/70 transition-all duration-500" style={{ width: `${(scoreData.total / 10) * 100}%` }} />
             </div>
+            <p className="text-xs text-muted-foreground">{insight.tip}</p>
+            <ul className="space-y-0.5">
+              {insight.details.map((d, i) => (
+                <li key={i} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                  <span className="mt-1 h-1 w-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                  {d}
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       )}
