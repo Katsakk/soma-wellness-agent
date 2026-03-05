@@ -139,7 +139,7 @@ const ChatInterface = () => {
   };
 
   return (
-    <div className="flex flex-col" style={{ height: "min(600px, 65vh)" }}>
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Messages area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 pr-1">
         {isEmpty ? (
