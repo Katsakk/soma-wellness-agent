@@ -1,16 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { LogOut, Target, Settings, Link, Loader2, Check, X } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { LogOut, Target, Settings, Link, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import GoalsDialog from "@/components/profile/GoalsDialog";
 
 const DIETARY_OPTIONS = ["Vegetarian", "Vegan", "Keto", "Paleo", "Gluten-Free", "Dairy-Free", "Low-Carb", "High-Protein"];
 const WORKOUT_OPTIONS = ["Running", "Cycling", "Swimming", "Yoga", "HIIT", "Strength Training", "Pilates", "CrossFit", "Boxing", "Walking"];
@@ -18,6 +18,13 @@ const UNIT_OPTIONS = [
   { value: "metric", label: "Metric (kg, cm)" },
   { value: "imperial", label: "Imperial (lbs, in)" },
 ];
+
+const GOAL_TYPE_LABELS: Record<string, string> = {
+  weight_loss: "🔥 Weight Loss",
+  fat_burn: "💪 Fat Burn",
+  maintenance: "⚖️ Maintenance",
+  muscle_gain: "🏋️ Muscle Gain",
+};
 
 const Profile = () => {
   const { user, signOut } = useAuth();
@@ -28,14 +35,17 @@ const Profile = () => {
 
   // Goals state
   const [goals, setGoals] = useState({
+    goal_type: "maintenance",
     target_calories: "",
     target_protein: "",
     target_carbs: "",
     target_fats: "",
     target_weight: "",
+    current_weight: "",
+    height: "",
+    exercise_days_per_week: 3,
   });
   const [goalsLoaded, setGoalsLoaded] = useState(false);
-  const [goalsSaving, setGoalsSaving] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [existingGoalId, setExistingGoalId] = useState<string | null>(null);
 
@@ -52,7 +62,6 @@ const Profile = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Fetch goals
     supabase
       .from("goals")
       .select("*")
@@ -62,18 +71,21 @@ const Profile = () => {
       .then(({ data }) => {
         if (data) {
           setGoals({
+            goal_type: data.goal_type || "maintenance",
             target_calories: data.target_calories?.toString() || "",
             target_protein: data.target_protein?.toString() || "",
             target_carbs: data.target_carbs?.toString() || "",
             target_fats: data.target_fats?.toString() || "",
             target_weight: data.target_weight?.toString() || "",
+            current_weight: (data as any).current_weight?.toString() || "",
+            height: (data as any).height?.toString() || "",
+            exercise_days_per_week: (data as any).exercise_days_per_week ?? 3,
           });
           setExistingGoalId(data.id);
         }
         setGoalsLoaded(true);
       });
 
-    // Fetch preferences
     supabase
       .from("preferences")
       .select("*")
@@ -91,38 +103,6 @@ const Profile = () => {
       });
   }, [user]);
 
-  const handleSaveGoals = async () => {
-    if (!user) return;
-    setGoalsSaving(true);
-    try {
-      const payload = {
-        user_id: user.id,
-        goal_type: "maintenance",
-        is_active: true,
-        target_calories: goals.target_calories ? parseInt(goals.target_calories) : null,
-        target_protein: goals.target_protein ? parseInt(goals.target_protein) : null,
-        target_carbs: goals.target_carbs ? parseInt(goals.target_carbs) : null,
-        target_fats: goals.target_fats ? parseInt(goals.target_fats) : null,
-        target_weight: goals.target_weight ? parseFloat(goals.target_weight) : null,
-      };
-
-      if (existingGoalId) {
-        const { error } = await supabase.from("goals").update(payload).eq("id", existingGoalId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase.from("goals").insert(payload).select().single();
-        if (error) throw error;
-        setExistingGoalId(data.id);
-      }
-      toast.success("Goals saved!");
-      setGoalsOpen(false);
-    } catch (e: any) {
-      toast.error(e.message || "Failed to save goals");
-    } finally {
-      setGoalsSaving(false);
-    }
-  };
-
   const handleSavePrefs = async () => {
     if (!user) return;
     setPrefsSaving(true);
@@ -133,8 +113,6 @@ const Profile = () => {
         workout_preferences: prefs.workout_preferences,
         units: prefs.units,
       };
-
-      // Upsert — try update first, insert if not exists
       const { data: existing } = await supabase
         .from("preferences")
         .select("id")
@@ -168,6 +146,13 @@ const Profile = () => {
 
   const hasGoals = goalsLoaded && (goals.target_calories || goals.target_protein);
 
+  const bmi = useMemo(() => {
+    const w = parseFloat(goals.current_weight);
+    const h = parseFloat(goals.height);
+    if (!w || !h) return null;
+    return parseFloat((w / ((h / 100) ** 2)).toFixed(1));
+  }, [goals.current_weight, goals.height]);
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
       <div className="flex items-center gap-4">
@@ -194,6 +179,14 @@ const Profile = () => {
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : hasGoals ? (
             <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="default" className="text-xs">
+                  {GOAL_TYPE_LABELS[goals.goal_type] || goals.goal_type}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  {goals.exercise_days_per_week}x/week
+                </Badge>
+              </div>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 {goals.target_calories && (
                   <div className="rounded-lg bg-muted p-2">
@@ -220,9 +213,11 @@ const Profile = () => {
                   </div>
                 )}
               </div>
-              {goals.target_weight && (
-                <p className="text-xs text-muted-foreground">Target weight: {goals.target_weight} kg</p>
-              )}
+              <div className="flex gap-4 text-xs text-muted-foreground mt-1">
+                {goals.current_weight && <span>Current: {goals.current_weight} kg</span>}
+                {goals.target_weight && <span>Target: {goals.target_weight} kg</span>}
+                {bmi && <span>BMI: {bmi}</span>}
+              </div>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No goals set yet. Set your health goals to get personalized recommendations.</p>
@@ -294,67 +289,19 @@ const Profile = () => {
       </Button>
 
       {/* Goals Dialog */}
-      <Dialog open={goalsOpen} onOpenChange={setGoalsOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Set Your Goals</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">Daily Calories (kcal)</Label>
-                <Input
-                  type="number"
-                  placeholder="2000"
-                  value={goals.target_calories}
-                  onChange={(e) => setGoals({ ...goals, target_calories: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Protein (g)</Label>
-                <Input
-                  type="number"
-                  placeholder="100"
-                  value={goals.target_protein}
-                  onChange={(e) => setGoals({ ...goals, target_protein: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Carbs (g)</Label>
-                <Input
-                  type="number"
-                  placeholder="250"
-                  value={goals.target_carbs}
-                  onChange={(e) => setGoals({ ...goals, target_carbs: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Fats (g)</Label>
-                <Input
-                  type="number"
-                  placeholder="67"
-                  value={goals.target_fats}
-                  onChange={(e) => setGoals({ ...goals, target_fats: e.target.value })}
-                />
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs">Target Weight (kg)</Label>
-              <Input
-                type="number"
-                step="0.1"
-                placeholder="70"
-                value={goals.target_weight}
-                onChange={(e) => setGoals({ ...goals, target_weight: e.target.value })}
-              />
-            </div>
-            <Button onClick={handleSaveGoals} disabled={goalsSaving} className="w-full">
-              {goalsSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Save Goals
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {user && (
+        <GoalsDialog
+          open={goalsOpen}
+          onOpenChange={setGoalsOpen}
+          userId={user.id}
+          initialData={goals}
+          existingGoalId={existingGoalId}
+          onSaved={(data, goalId) => {
+            setGoals(data);
+            setExistingGoalId(goalId);
+          }}
+        />
+      )}
 
       {/* Preferences Dialog */}
       <Dialog open={prefsOpen} onOpenChange={setPrefsOpen}>

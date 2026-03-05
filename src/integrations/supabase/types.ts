@@ -41,7 +41,10 @@ export type Database = {
       goals: {
         Row: {
           created_at: string
+          current_weight: number | null
+          exercise_days_per_week: number | null
           goal_type: string
+          height: number | null
           id: string
           is_active: boolean | null
           target_calories: number | null
@@ -54,7 +57,10 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          current_weight?: number | null
+          exercise_days_per_week?: number | null
           goal_type: string
+          height?: number | null
           id?: string
           is_active?: boolean | null
           target_calories?: number | null
@@ -67,7 +73,10 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          current_weight?: number | null
+          exercise_days_per_week?: number | null
           goal_type?: string
+          height?: number | null
           id?: string
           is_active?: boolean | null
           target_calories?: number | null
