@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Flame, Clock, Dumbbell, Timer } from "lucide-react";
+import { Flame, Clock, Dumbbell, Timer, Zap } from "lucide-react";
 
 interface Workout {
   id: string;
@@ -45,21 +45,55 @@ const TodayActivitySummary = ({ workouts }: TodayActivitySummaryProps) => {
 
   const progressAngle = startAngle + sweepAngle * progress;
 
-  // Workout type breakdown
-  const typeMap: Record<string, { label: string; emoji: string }> = {
-    cardio: { label: "Cardio", emoji: "🏃" },
-    strength: { label: "Strength", emoji: "💪" },
-    flexibility: { label: "Flexibility", emoji: "🧘" },
-    sports: { label: "Sports", emoji: "⚽" },
-    hiit: { label: "HIIT", emoji: "🔥" },
-    other: { label: "General", emoji: "🏋️" },
+  // All activity categories
+  const categories = [
+    { key: "cardio", label: "Cardio", emoji: "🏃" },
+    { key: "strength", label: "Strength", emoji: "💪" },
+    { key: "hiit", label: "HIIT", emoji: "🔥" },
+    { key: "full_body", label: "Full Body", emoji: "🏋️" },
+    { key: "upper_body", label: "Upper Body", emoji: "💪" },
+    { key: "lower_body", label: "Lower Body", emoji: "🦵" },
+    { key: "flexibility", label: "Flexibility", emoji: "🧘" },
+    { key: "sports", label: "Sports", emoji: "⚽" },
+  ];
+
+  // Categorize workouts — check workout_type and name/keywords
+  const categoryKeywords: Record<string, string[]> = {
+    cardio: ["cardio", "run", "jog", "cycling", "bike", "swim", "walk"],
+    strength: ["strength", "weights", "lifting", "deadlift", "squat", "bench"],
+    hiit: ["hiit", "interval", "tabata", "circuit"],
+    full_body: ["full body", "full-body", "crossfit", "functional"],
+    upper_body: ["upper body", "upper-body", "chest", "back", "shoulders", "arms", "bicep", "tricep", "push"],
+    lower_body: ["lower body", "lower-body", "legs", "glutes", "hamstring", "calf", "pull"],
+    flexibility: ["flexibility", "yoga", "stretch", "pilates", "mobility"],
+    sports: ["sports", "football", "basketball", "tennis", "soccer", "boxing", "martial"],
   };
 
-  const typeCounts = workouts.reduce<Record<string, number>>((acc, w) => {
-    const type = w.workout_type || "other";
-    acc[type] = (acc[type] || 0) + 1;
+  const categorizeWorkout = (w: Workout): string => {
+    // Direct type match
+    const type = w.workout_type?.toLowerCase() || "";
+    if (categories.some((c) => c.key === type)) return type;
+
+    // Keyword match from name
+    const text = `${w.name} ${type}`.toLowerCase();
+    for (const [cat, keywords] of Object.entries(categoryKeywords)) {
+      if (keywords.some((kw) => text.includes(kw))) return cat;
+    }
+    return "full_body"; // default
+  };
+
+  const categoryCals = categories.reduce<Record<string, number>>((acc, c) => {
+    acc[c.key] = 0;
     return acc;
   }, {});
+
+  workouts.forEach((w) => {
+    const cat = categorizeWorkout(w);
+    categoryCals[cat] += w.calories_burned || 0;
+  });
+
+  // Only show categories that have data
+  const activeCategories = categories.filter((c) => categoryCals[c.key] > 0);
 
   return (
     <div className="space-y-4">
@@ -147,22 +181,22 @@ const TodayActivitySummary = ({ workouts }: TodayActivitySummaryProps) => {
         </CardContent>
       </Card>
 
-      {/* Type breakdown chips */}
-      {Object.keys(typeCounts).length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(typeCounts).map(([type, count]) => {
-            const info = typeMap[type] || typeMap.other;
-            return (
-              <div
-                key={type}
-                className="inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-xs font-medium"
-              >
-                <span>{info.emoji}</span>
-                <span>{info.label}</span>
-                <span className="text-muted-foreground">×{count}</span>
-              </div>
-            );
-          })}
+      {/* Category breakdown cards */}
+      {activeCategories.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {activeCategories.map((cat) => (
+            <div
+              key={cat.key}
+              className="rounded-xl border bg-card p-3 text-center space-y-1"
+            >
+              <span className="text-base">{cat.emoji}</span>
+              <p className="text-[11px] text-muted-foreground">{cat.label}</p>
+              <p className="text-sm font-bold">
+                {Math.round(categoryCals[cat.key])}{" "}
+                <span className="text-[10px] font-normal text-muted-foreground">kcal</span>
+              </p>
+            </div>
+          ))}
         </div>
       )}
     </div>
