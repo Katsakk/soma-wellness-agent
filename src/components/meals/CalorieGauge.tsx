@@ -20,10 +20,10 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
   const endAngle = startAngle + sweepAngle;
 
   const polarToCartesian = (angle: number) => {
-    const rad = ((angle - 90) * Math.PI) / 180;
+    const rad = (angle - 90) * Math.PI / 180;
     return {
       x: center + radius * Math.cos(rad),
-      y: center + radius * Math.sin(rad),
+      y: center + radius * Math.sin(rad)
     };
   };
 
@@ -38,25 +38,25 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
 
   return (
     <div className="flex flex-col items-center">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="mx-[10px]">
         {/* Background arc */}
         <path
           d={describeArc(startAngle, endAngle)}
           fill="none"
           stroke="hsl(var(--muted))"
           strokeWidth={strokeWidth}
-          strokeLinecap="round"
-        />
+          strokeLinecap="round" />
+        
         {/* Progress arc */}
-        {progress > 0.01 && (
-          <path
-            d={describeArc(startAngle, progressAngle)}
-            fill="none"
-            stroke="hsl(var(--warning))"
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-          />
-        )}
+        {progress > 0.01 &&
+        <path
+          d={describeArc(startAngle, progressAngle)}
+          fill="none"
+          stroke="hsl(var(--warning))"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round" />
+
+        }
         {/* Center content: icon above text */}
         <g transform={`translate(${center}, ${center})`}>
           {/* Fire icon — positioned well above the number */}
@@ -66,16 +66,16 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
               height={24}
               stroke="hsl(var(--warning))"
               fill="hsl(var(--warning))"
-              opacity={0.85}
-            />
+              opacity={0.85} />
+            
           </g>
           {/* Consumed number */}
           <text
             textAnchor="middle"
             y={0}
             className="fill-foreground"
-            style={{ fontSize: "36px", fontWeight: 700 }}
-          >
+            style={{ fontSize: "36px", fontWeight: 700 }}>
+            
             {consumed}
           </text>
           {/* Label */}
@@ -83,8 +83,8 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
             textAnchor="middle"
             y={18}
             className="fill-muted-foreground"
-            style={{ fontSize: "12px" }}
-          >
+            style={{ fontSize: "12px" }}>
+            
             Consumed
           </text>
         </g>
@@ -96,15 +96,15 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
               x={endPos.x + 14}
               y={endPos.y + 4}
               className="fill-muted-foreground"
-              style={{ fontSize: "11px", fontWeight: 500 }}
-            >
+              style={{ fontSize: "11px", fontWeight: 500 }}>
+              
               {target.toLocaleString()}
-            </text>
-          );
+            </text>);
+
         })()}
       </svg>
-    </div>
-  );
+    </div>);
+
 };
 
 export default CalorieGauge;
