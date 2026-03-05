@@ -86,10 +86,10 @@ const Index = () => {
   };
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
+    <div className="mx-auto max-w-2xl px-4 py-4 flex flex-col h-[calc(100dvh-5rem)] md:h-[calc(100dvh-1rem)] space-y-3">
       {/* Logo centered */}
-      <div className="flex justify-center pt-2">
-        <img src={somaLogo} alt="SOMA" className="h-16 w-auto" />
+      <div className="flex justify-center">
+        <img src={somaLogo} alt="SOMA" className="h-12 w-auto" />
       </div>
 
       {/* Today label — matches tab trigger font */}
@@ -98,11 +98,11 @@ const Index = () => {
       {/* Score card */}
       {loaded && scoreData && (
         <Card>
-          <CardContent className="flex items-center gap-4 p-4">
-            <div className="flex items-center justify-center rounded-xl bg-warning/10 h-14 w-14 shrink-0">
+          <CardContent className="flex items-center gap-3 p-3">
+            <div className="flex items-center justify-center rounded-xl bg-warning/10 h-12 w-12 shrink-0">
               <div className="text-center">
-                <Star className="h-4 w-4 text-warning fill-warning mx-auto mb-0.5" />
-                <span className="text-lg font-bold leading-none">{scoreData.total}</span>
+                <Star className="h-3.5 w-3.5 text-warning fill-warning mx-auto mb-0.5" />
+                <span className="text-base font-bold leading-none">{scoreData.total}</span>
               </div>
             </div>
             <div className="min-w-0">
@@ -116,42 +116,41 @@ const Index = () => {
       {/* Daily summary cards — compact */}
       <div className="grid grid-cols-4 gap-2">
         <Card className="bg-primary/5 border-primary/10">
-          <CardContent className="flex flex-col items-center gap-1 p-3">
-            <Flame className="h-4 w-4 text-primary" />
+          <CardContent className="flex flex-col items-center gap-1 p-2.5">
+            <Flame className="h-3.5 w-3.5 text-primary" />
             <p className="text-[10px] text-muted-foreground">Calories</p>
-            <p className="text-sm font-bold">{loaded ? (totals.calories || "—") : "—"}</p>
+            <p className="text-xs font-bold">{loaded ? (totals.calories || "—") : "—"}</p>
           </CardContent>
         </Card>
         <Card className="bg-accent/5 border-accent/10">
-          <CardContent className="flex flex-col items-center gap-1 p-3">
-            <Drumstick className="h-4 w-4 text-accent" />
+          <CardContent className="flex flex-col items-center gap-1 p-2.5">
+            <Drumstick className="h-3.5 w-3.5 text-accent" />
             <p className="text-[10px] text-muted-foreground">Protein</p>
-            <p className="text-sm font-bold">{loaded ? (totals.protein ? `${Math.round(totals.protein)}g` : "—") : "—"}</p>
+            <p className="text-xs font-bold">{loaded ? (totals.protein ? `${Math.round(totals.protein)}g` : "—") : "—"}</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex flex-col items-center gap-1 p-3">
-            <Footprints className="h-4 w-4 text-muted-foreground" />
+          <CardContent className="flex flex-col items-center gap-1 p-2.5">
+            <Footprints className="h-3.5 w-3.5 text-muted-foreground" />
             <p className="text-[10px] text-muted-foreground">Steps</p>
-            <p className="text-sm font-bold">—</p>
+            <p className="text-xs font-bold">—</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex flex-col items-center gap-1 p-3">
-            <Moon className="h-4 w-4 text-muted-foreground" />
+          <CardContent className="flex flex-col items-center gap-1 p-2.5">
+            <Moon className="h-3.5 w-3.5 text-muted-foreground" />
             <p className="text-[10px] text-muted-foreground">Sleep</p>
-            <p className="text-sm font-bold">—</p>
+            <p className="text-xs font-bold">—</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* AI Chat in a card */}
-      <Card className="border-border/50">
-        <CardContent className="p-4">
+      {/* AI Chat — fills remaining space */}
+      <Card className="border-border/50 flex-1 min-h-0 flex flex-col">
+        <CardContent className="p-4 flex-1 min-h-0 flex flex-col">
           <ChatInterface />
         </CardContent>
       </Card>
-
     </div>
   );
 };
