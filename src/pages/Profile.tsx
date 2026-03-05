@@ -1,13 +1,14 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { LogOut, Target, Settings, Link, Loader2, Check } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { LogOut, Target, Settings, Link, Loader2, Check, Pencil, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import GoalsDialog, { type GoalsData } from "@/components/profile/GoalsDialog";
@@ -30,7 +31,18 @@ const Profile = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
-  const displayName = user?.user_metadata?.display_name || user?.email || "User";
+  const [profileData, setProfileData] = useState<{ display_name: string; avatar_url: string | null }>({
+    display_name: "", avatar_url: null,
+  });
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editAvatarPreview, setEditAvatarPreview] = useState<string | null>(null);
+  const [editAvatarFile, setEditAvatarFile] = useState<File | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const displayName = profileData.display_name || user?.email || "User";
   const initials = displayName.slice(0, 2).toUpperCase();
 
   const [goals, setGoals] = useState<GoalsData>({
@@ -48,6 +60,16 @@ const Profile = () => {
 
   useEffect(() => {
     if (!user) return;
+    // Load profile
+    supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle().then(({ data }) => {
+      if (data) {
+        setProfileData({ display_name: data.display_name || "", avatar_url: data.avatar_url || null });
+      } else {
+        setProfileData({ display_name: user.user_metadata?.display_name || user.email || "", avatar_url: null });
+      }
+      setProfileLoaded(true);
+    });
+    // Load goals
     supabase.from("goals").select("*").eq("user_id", user.id).eq("is_active", true).maybeSingle().then(({ data }) => {
       if (data) {
         const d = data as any;
@@ -68,6 +90,56 @@ const Profile = () => {
       setPrefsLoaded(true);
     });
   }, [user]);
+
+  const openEditProfile = () => {
+    setEditName(profileData.display_name);
+    setEditAvatarPreview(profileData.avatar_url);
+    setEditAvatarFile(null);
+    setEditProfileOpen(true);
+  };
+
+  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast.error("Image must be under 2MB"); return; }
+    setEditAvatarFile(file);
+    setEditAvatarPreview(URL.createObjectURL(file));
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setProfileSaving(true);
+    try {
+      let avatarUrl = profileData.avatar_url;
+
+      if (editAvatarFile) {
+        const ext = editAvatarFile.name.split(".").pop();
+        const filePath = `${user.id}/avatar.${ext}`;
+        const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, editAvatarFile, { upsert: true });
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(filePath);
+        avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+      }
+
+      const payload = { display_name: editName.trim() || null, avatar_url: avatarUrl };
+      const { data: existing } = await supabase.from("profiles").select("id").eq("user_id", user.id).maybeSingle();
+      if (existing) {
+        const { error } = await supabase.from("profiles").update(payload).eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("profiles").insert({ user_id: user.id, ...payload });
+        if (error) throw error;
+      }
+
+      setProfileData({ display_name: editName.trim(), avatar_url: avatarUrl });
+      toast.success("Profile updated!");
+      setEditProfileOpen(false);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update profile");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const handleSavePrefs = async () => {
     if (!user) return;
@@ -95,13 +167,19 @@ const Profile = () => {
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
       <div className="flex items-center gap-4">
-        <Avatar className="h-16 w-16">
-          <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold">{initials}</AvatarFallback>
-        </Avatar>
-        <div>
+        <div className="relative">
+          <Avatar className="h-16 w-16">
+            {profileData.avatar_url && <AvatarImage src={profileData.avatar_url} alt={displayName} />}
+            <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold">{initials}</AvatarFallback>
+          </Avatar>
+        </div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold tracking-tight">{displayName}</h1>
           <p className="text-muted-foreground text-sm">{user?.email}</p>
         </div>
+        <Button variant="ghost" size="icon" onClick={openEditProfile} className="shrink-0">
+          <Pencil className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* Goals */}
@@ -167,6 +245,35 @@ const Profile = () => {
       </Button>
 
       {user && <GoalsDialog open={goalsOpen} onOpenChange={setGoalsOpen} userId={user.id} initialData={goals} existingGoalId={existingGoalId} onSaved={(data, goalId) => { setGoals(data); setExistingGoalId(goalId); }} />}
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={editProfileOpen} onOpenChange={setEditProfileOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Edit Profile</DialogTitle></DialogHeader>
+          <div className="space-y-5">
+            <div className="flex flex-col items-center gap-3">
+              <div className="relative cursor-pointer group" onClick={() => fileInputRef.current?.click()}>
+                <Avatar className="h-20 w-20">
+                  {editAvatarPreview && <AvatarImage src={editAvatarPreview} alt="Preview" />}
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xl font-bold">{initials}</AvatarFallback>
+                </Avatar>
+                <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Camera className="h-5 w-5 text-white" />
+                </div>
+              </div>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarSelect} />
+              <button onClick={() => fileInputRef.current?.click()} className="text-xs text-primary hover:underline">Change photo</button>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Display Name</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Your name" className="mt-1" />
+            </div>
+            <Button onClick={handleSaveProfile} disabled={profileSaving} className="w-full">
+              {profileSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Preferences Dialog */}
       <Dialog open={prefsOpen} onOpenChange={setPrefsOpen}>
