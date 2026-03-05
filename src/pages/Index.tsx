@@ -89,7 +89,7 @@ const Index = () => {
     <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
       {/* Logo centered */}
       <div className="flex justify-center pt-2">
-        <img src={somaLogo} alt="SOMA" className="h-10 w-auto" />
+        <img src={somaLogo} alt="SOMA" className="h-16 w-auto" />
       </div>
 
       {/* Today label — matches tab trigger font */}
@@ -113,56 +113,44 @@ const Index = () => {
         </Card>
       )}
 
-      {/* Daily summary cards */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Daily summary cards — compact */}
+      <div className="grid grid-cols-4 gap-2">
         <Card className="bg-primary/5 border-primary/10">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-primary/10 p-2">
-              <Flame className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Calories</p>
-              <p className="text-lg font-bold">{loaded ? (totals.calories || "—") : "—"}</p>
-            </div>
+          <CardContent className="flex flex-col items-center gap-1 p-3">
+            <Flame className="h-4 w-4 text-primary" />
+            <p className="text-[10px] text-muted-foreground">Calories</p>
+            <p className="text-sm font-bold">{loaded ? (totals.calories || "—") : "—"}</p>
           </CardContent>
         </Card>
         <Card className="bg-accent/5 border-accent/10">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-accent/10 p-2">
-              <Drumstick className="h-5 w-5 text-accent" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Protein</p>
-              <p className="text-lg font-bold">{loaded ? (totals.protein ? `${Math.round(totals.protein)}g` : "—") : "—"}</p>
-            </div>
+          <CardContent className="flex flex-col items-center gap-1 p-3">
+            <Drumstick className="h-4 w-4 text-accent" />
+            <p className="text-[10px] text-muted-foreground">Protein</p>
+            <p className="text-sm font-bold">{loaded ? (totals.protein ? `${Math.round(totals.protein)}g` : "—") : "—"}</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-muted p-2">
-              <Footprints className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Steps</p>
-              <p className="text-lg font-bold">—</p>
-            </div>
+          <CardContent className="flex flex-col items-center gap-1 p-3">
+            <Footprints className="h-4 w-4 text-muted-foreground" />
+            <p className="text-[10px] text-muted-foreground">Steps</p>
+            <p className="text-sm font-bold">—</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-muted p-2">
-              <Moon className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Sleep</p>
-              <p className="text-lg font-bold">—</p>
-            </div>
+          <CardContent className="flex flex-col items-center gap-1 p-3">
+            <Moon className="h-4 w-4 text-muted-foreground" />
+            <p className="text-[10px] text-muted-foreground">Sleep</p>
+            <p className="text-sm font-bold">—</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* AI Chat */}
-      <ChatInterface />
+      {/* AI Chat in a card */}
+      <Card className="border-border/50">
+        <CardContent className="p-4">
+          <ChatInterface />
+        </CardContent>
+      </Card>
 
     </div>
   );
