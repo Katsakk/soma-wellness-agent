@@ -142,9 +142,9 @@ const ChatInterface = () => {
                 <Bot className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <p className="font-medium text-sm">Log meals by text, voice, or photo</p>
+                <p className="font-medium text-sm">Log meals & activity by text, voice, or photo</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Snap a plate, a menu, or your fridge — I'll identify the food and estimate macros.
+                  Tell me what you ate or how you worked out — I'll log everything and estimate macros and calories burned.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 justify-center">
