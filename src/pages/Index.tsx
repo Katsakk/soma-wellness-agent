@@ -1,11 +1,117 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Activity, Flame, Drumstick, Moon, Footprints, UtensilsCrossed, Dumbbell, RefreshCw, Send } from "lucide-react";
+import { useState } from "react";
 
 const Index = () => {
+  const { user } = useAuth();
+  const [prompt, setPrompt] = useState("");
+
+  const firstName = user?.user_metadata?.display_name?.split(" ")[0] || "there";
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Hey {firstName} 👋</h1>
+        <p className="text-muted-foreground text-sm mt-1">Here's your health snapshot for today.</p>
+      </div>
+
+      {/* Daily summary cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="bg-primary/5 border-primary/10">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="rounded-lg bg-primary/10 p-2">
+              <Flame className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Calories</p>
+              <p className="text-lg font-bold">—</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-accent/5 border-accent/10">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="rounded-lg bg-accent/10 p-2">
+              <Drumstick className="h-5 w-5 text-accent" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Protein</p>
+              <p className="text-lg font-bold">—</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="rounded-lg bg-muted p-2">
+              <Footprints className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Steps</p>
+              <p className="text-lg font-bold">—</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="rounded-lg bg-muted p-2">
+              <Moon className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Sleep</p>
+              <p className="text-lg font-bold">—</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* AI Chat prompt */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Activity className="h-4 w-4 text-primary" />
+            Ask your health agent
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setPrompt("");
+            }}
+          >
+            <Input
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Did I eat enough protein today?"
+              className="flex-1"
+            />
+            <Button type="submit" size="icon" disabled={!prompt.trim()}>
+              <Send className="h-4 w-4" />
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Quick actions */}
+      <div>
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">Quick actions</h2>
+        <div className="grid grid-cols-3 gap-3">
+          <Button variant="outline" className="h-auto flex-col gap-2 py-4">
+            <UtensilsCrossed className="h-5 w-5" />
+            <span className="text-xs">Log meal</span>
+          </Button>
+          <Button variant="outline" className="h-auto flex-col gap-2 py-4">
+            <Dumbbell className="h-5 w-5" />
+            <span className="text-xs">Workout</span>
+          </Button>
+          <Button variant="outline" className="h-auto flex-col gap-2 py-4">
+            <RefreshCw className="h-5 w-5" />
+            <span className="text-xs">Sync</span>
+          </Button>
+        </div>
       </div>
     </div>
   );
