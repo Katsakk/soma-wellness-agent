@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Flame, Drumstick, Moon, Footprints, Star } from "lucide-react";
+import { Flame, Drumstick, Zap, Footprints, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ChatInterface from "@/components/ChatInterface";
 import somaLogo from "@/assets/soma-logo.png";
@@ -12,7 +12,7 @@ const DEFAULT_TARGETS = { calories: 2000, protein: 100 };
 const Index = () => {
   const { user } = useAuth();
   const firstName = user?.user_metadata?.display_name?.split(" ")[0] || "there";
-  const [totals, setTotals] = useState({ calories: 0, protein: 0, workoutMin: 0 });
+  const [totals, setTotals] = useState({ calories: 0, protein: 0, workoutMin: 0, caloriesBurned: 0 });
   const [targets, setTargets] = useState(DEFAULT_TARGETS);
   const [loaded, setLoaded] = useState(false);
 
@@ -29,7 +29,7 @@ const Index = () => {
         .gte("meal_time", todayStart.toISOString()),
       supabase
         .from("workouts")
-        .select("duration")
+        .select("duration, calories_burned")
         .eq("user_id", user.id)
         .gte("created_at", todayStart.toISOString()),
       supabase
@@ -45,6 +45,7 @@ const Index = () => {
         calories: meals.reduce((s, m) => s + (m.calories || 0), 0),
         protein: meals.reduce((s, m) => s + (Number(m.protein) || 0), 0),
         workoutMin: workouts.reduce((s, w) => s + (w.duration || 0), 0),
+        caloriesBurned: workouts.reduce((s, w) => s + (w.calories_burned || 0), 0),
       });
       if (goalsRes.data?.[0]) {
         const g = goalsRes.data[0];
@@ -136,11 +137,11 @@ const Index = () => {
             <p className="text-xs font-bold">—</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-destructive/5 border-destructive/10">
           <CardContent className="flex flex-col items-center gap-1 p-2.5">
-            <Moon className="h-3.5 w-3.5 text-muted-foreground" />
-            <p className="text-[10px] text-muted-foreground">Sleep</p>
-            <p className="text-xs font-bold">—</p>
+            <Zap className="h-3.5 w-3.5 text-destructive" />
+            <p className="text-[10px] text-muted-foreground">Active Energy</p>
+            <p className="text-xs font-bold">{loaded ? (totals.caloriesBurned || "—") : "—"}</p>
           </CardContent>
         </Card>
       </div>
