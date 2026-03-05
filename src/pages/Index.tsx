@@ -124,7 +124,7 @@ const Index = () => {
   };
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-4 flex flex-col h-[calc(100dvh-5rem)] md:h-[calc(100dvh-1rem)] space-y-3">
+    <div className="mx-auto max-w-2xl px-4 py-4 flex flex-col min-h-[calc(100dvh-5rem)] md:min-h-0 md:h-[calc(100dvh-1rem)] space-y-3 overflow-y-auto md:overflow-hidden">
       <div className="flex justify-center">
         <img src={somaLogo} alt="SOMA" className="h-20 w-auto" />
       </div>
@@ -197,7 +197,7 @@ const Index = () => {
         </Card>
       </div>
 
-      <Card className="border-border/50 flex-1 min-h-0 flex flex-col">
+      <Card className="border-border/50 min-h-[400px] md:flex-1 md:min-h-0 flex flex-col">
         <CardContent className="p-4 flex-1 min-h-0 flex flex-col">
           <ChatInterface conversationId={activeId} onFirstMessage={handleFirstMessage} />
         </CardContent>
