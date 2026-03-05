@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { streamChat, type ChatMessage } from "@/lib/streamChat";
 import { compressImage } from "@/lib/imageUtils";
 import { useVoiceRecording } from "@/hooks/useVoiceRecording";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Send, Loader2, User, Mic, MicOff, Camera, X, Plus } from "lucide-react";
+import { Send, Loader2, Mic, MicOff, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 
@@ -23,9 +24,48 @@ const ChatInterface = () => {
   const [input, setInput] = useState("");
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load chat history on mount
+  useEffect(() => {
+    if (!user) return;
+    const loadHistory = async () => {
+      const { data } = await supabase
+        .from("chat_messages")
+        .select("role, content, images, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(100);
+      if (data && data.length > 0) {
+        setMessages(
+          data.map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            images: m.images && m.images.length > 0 ? m.images : undefined,
+          }))
+        );
+      }
+      setHistoryLoaded(true);
+    };
+    loadHistory();
+  }, [user]);
+
+  // Save a message to the database
+  const saveMessage = useCallback(
+    async (msg: ChatMessage) => {
+      if (!user) return;
+      await supabase.from("chat_messages").insert({
+        user_id: user.id,
+        role: msg.role,
+        content: msg.content,
+        images: msg.images || [],
+      });
+    },
+    [user]
+  );
 
   const handleVoiceResult = useCallback((text: string) => {
     setInput((prev) => (prev ? prev + " " + text : text));
@@ -48,14 +88,12 @@ const ChatInterface = () => {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-
     const maxImages = 3;
     const remaining = maxImages - pendingImages.length;
     if (remaining <= 0) {
       toast.error("Maximum 3 images per message");
       return;
     }
-
     const toProcess = Array.from(files).slice(0, remaining);
     try {
       const compressed = await Promise.all(toProcess.map((f) => compressImage(f)));
@@ -63,7 +101,6 @@ const ChatInterface = () => {
     } catch {
       toast.error("Failed to process image");
     }
-
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -86,6 +123,9 @@ const ChatInterface = () => {
     setPendingImages([]);
     setIsLoading(true);
 
+    // Save user message
+    saveMessage(userMsg);
+
     let assistantContent = "";
 
     const upsertAssistant = (chunk: string) => {
@@ -104,7 +144,13 @@ const ChatInterface = () => {
         messages: updatedMessages,
         accessToken: session.access_token,
         onDelta: upsertAssistant,
-        onDone: () => setIsLoading(false),
+        onDone: () => {
+          setIsLoading(false);
+          // Save completed assistant message
+          if (assistantContent) {
+            saveMessage({ role: "assistant", content: assistantContent });
+          }
+        },
         onError: (error) => {
           toast.error(error);
           setIsLoading(false);
@@ -130,7 +176,6 @@ const ChatInterface = () => {
 
   const isEmpty = messages.length === 0;
 
-  // Get time-based greeting
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Morning";
@@ -140,7 +185,6 @@ const ChatInterface = () => {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Messages area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 pr-1">
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full text-center gap-6 py-8">
@@ -170,12 +214,7 @@ const ChatInterface = () => {
                 {msg.images && msg.images.length > 0 && (
                   <div className="flex gap-1.5 mb-2 flex-wrap">
                     {msg.images.map((img, j) => (
-                      <img
-                        key={j}
-                        src={img}
-                        alt="Uploaded food"
-                        className="rounded-lg max-h-32 max-w-[140px] object-cover"
-                      />
+                      <img key={j} src={img} alt="Uploaded food" className="rounded-lg max-h-32 max-w-[140px] object-cover" />
                     ))}
                   </div>
                 )}
@@ -197,7 +236,6 @@ const ChatInterface = () => {
         )}
       </div>
 
-      {/* Image previews */}
       {pendingImages.length > 0 && (
         <div className="flex gap-2 flex-wrap px-1 pb-2">
           {pendingImages.map((img, i) => (
@@ -214,7 +252,6 @@ const ChatInterface = () => {
         </div>
       )}
 
-      {/* Input — card style like reference */}
       <Card className="flex-shrink-0 border-border/50 shadow-sm">
         <CardContent className="p-3">
           <form onSubmit={handleSubmit} className="space-y-2">
@@ -232,48 +269,18 @@ const ChatInterface = () => {
             />
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1">
-                {/* Image button */}
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 text-muted-foreground"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isLoading}
-                >
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
                   <Plus className="h-4 w-4" />
                 </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  capture="environment"
-                  className="hidden"
-                  onChange={handleImageUpload}
-                />
+                <input ref={fileInputRef} type="file" accept="image/*" multiple capture="environment" className="hidden" onChange={handleImageUpload} />
               </div>
               <div className="flex items-center gap-1">
-                {/* Voice button */}
                 {voiceSupported && (
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant={isRecording ? "destructive" : "ghost"}
-                    className="h-8 w-8 text-muted-foreground"
-                    onClick={isRecording ? stopRecording : startRecording}
-                    disabled={isLoading}
-                  >
+                  <Button type="button" size="icon" variant={isRecording ? "destructive" : "ghost"} className="h-8 w-8 text-muted-foreground" onClick={isRecording ? stopRecording : startRecording} disabled={isLoading}>
                     {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                   </Button>
                 )}
-                {/* Send button */}
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={(!input.trim() && pendingImages.length === 0) || isLoading}
-                >
+                <Button type="submit" size="icon" className="h-8 w-8" disabled={(!input.trim() && pendingImages.length === 0) || isLoading}>
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
