@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { LogOut, Target, Settings, Link, Loader2, Check, Pencil, Camera, Mail, Activity, Moon } from "lucide-react";
+import { LogOut, Target, Settings, Link, Loader2, Check, Pencil, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import GoalsDialog, { type GoalsData } from "@/components/profile/GoalsDialog";
@@ -247,9 +247,9 @@ const Profile = () => {
           <p className="text-sm text-muted-foreground mb-3">Connect services to automatically sync your health data.</p>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { id: "gmail", name: "Gmail", description: "Scan booking emails", icon: Mail, color: "text-destructive", bgColor: "bg-destructive/10" },
-              { id: "strava", name: "Strava", description: "Import runs & rides", icon: Activity, color: "text-primary", bgColor: "bg-primary/10" },
-              { id: "oura", name: "Oura", description: "Sync ring activity", icon: Moon, color: "text-accent-foreground", bgColor: "bg-accent" },
+              { id: "gmail", name: "Gmail", logo: "/logos/gmail.svg" },
+              { id: "strava", name: "Strava", logo: "/logos/strava.svg" },
+              { id: "oura", name: "Oura", logo: "/logos/oura.png" },
             ].map((int) => {
               const status = connectedIntegrations[int.id];
               const isConnected = status === "connected";
@@ -259,8 +259,8 @@ const Profile = () => {
                   onClick={() => toast.info(`${int.name} integration coming soon!`)}
                   className="relative flex flex-col items-center gap-2 rounded-xl border bg-card p-4 hover:bg-muted transition-colors cursor-pointer"
                 >
-                  <div className={`rounded-lg ${int.bgColor} p-3`}>
-                    <int.icon className={`h-6 w-6 ${int.color}`} />
+                  <div className="rounded-lg bg-muted p-3">
+                    <img src={int.logo} alt={int.name} className="h-6 w-6 object-contain" />
                   </div>
                   <span className="text-xs font-medium">{int.name}</span>
                   <span className={`absolute top-2 right-2 inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${isConnected ? "bg-green-500/15 text-green-600" : "bg-muted text-muted-foreground"}`}>
