@@ -4,10 +4,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Flame, Drumstick, Zap, Footprints } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ChatInterface from "@/components/ChatInterface";
+import ConversationList from "@/components/chat/ConversationList";
+import { useConversations } from "@/hooks/useConversations";
 import somaLogo from "@/assets/soma-logo.png";
 
 const DEFAULT_TARGETS = { calories: 2000, protein: 100 };
-const DEFAULT_ACTIVITY_TARGET = 30; // minutes
+const DEFAULT_ACTIVITY_TARGET = 30;
 
 const Index = () => {
   const { user } = useAuth();
@@ -16,6 +18,25 @@ const Index = () => {
   const [targets, setTargets] = useState(DEFAULT_TARGETS);
   const [activityTarget, setActivityTarget] = useState(DEFAULT_ACTIVITY_TARGET);
   const [loaded, setLoaded] = useState(false);
+
+  const {
+    conversations,
+    activeId,
+    setActiveId,
+    loaded: convsLoaded,
+    createConversation,
+    deleteConversation,
+    renameConversation,
+    autoTitle,
+    touchConversation,
+  } = useConversations();
+
+  // Auto-create first conversation if none exist
+  useEffect(() => {
+    if (convsLoaded && conversations.length === 0 && user) {
+      createConversation("New Chat");
+    }
+  }, [convsLoaded, conversations.length, user, createConversation]);
 
   useEffect(() => {
     if (!user) return;
@@ -54,16 +75,13 @@ const Index = () => {
           calories: g.target_calories || DEFAULT_TARGETS.calories,
           protein: g.target_protein || DEFAULT_TARGETS.protein,
         });
-        // Derive daily activity target from exercise_days_per_week
         const exDays = g.exercise_days_per_week ?? 3;
-        // Scale: more exercise days = higher daily target expectation
         setActivityTarget(Math.round(30 + (exDays - 3) * 5));
       }
       setLoaded(true);
     });
   }, [user]);
 
-  // Score out of 10 — weighted: calories 4pts, protein 3pts, activity 3pts
   const calcScore = () => {
     if (!loaded) return null;
     const calPct = Math.min(totals.calories / targets.calories, 1);
@@ -97,6 +115,13 @@ const Index = () => {
     return { tip, details };
   };
   const insight = getScoreInsight();
+
+  const handleFirstMessage = (text: string) => {
+    if (activeId) {
+      autoTitle(activeId, text);
+      touchConversation(activeId);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-4 flex flex-col h-[calc(100dvh-5rem)] md:h-[calc(100dvh-1rem)] space-y-3">
@@ -172,9 +197,19 @@ const Index = () => {
         </Card>
       </div>
 
+      {/* Conversation list */}
+      <ConversationList
+        conversations={conversations}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onCreate={() => createConversation()}
+        onDelete={deleteConversation}
+        onRename={renameConversation}
+      />
+
       <Card className="border-border/50 flex-1 min-h-0 flex flex-col">
         <CardContent className="p-4 flex-1 min-h-0 flex flex-col">
-          <ChatInterface />
+          <ChatInterface conversationId={activeId} onFirstMessage={handleFirstMessage} />
         </CardContent>
       </Card>
     </div>

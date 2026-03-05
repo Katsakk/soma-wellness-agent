@@ -17,7 +17,12 @@ const SUGGESTIONS = [
   "Give me a 30-min dumbbell workout",
 ];
 
-const ChatInterface = () => {
+type Props = {
+  conversationId: string | null;
+  onFirstMessage?: (text: string) => void;
+};
+
+const ChatInterface = ({ conversationId, onFirstMessage }: Props) => {
   const { session, user } = useAuth();
   const firstName = user?.user_metadata?.display_name?.split(" ")[0] || "there";
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -29,14 +34,23 @@ const ChatInterface = () => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load chat history on mount
+  // Load chat history when conversationId changes
   useEffect(() => {
     if (!user) return;
+    setMessages([]);
+    setHistoryLoaded(false);
+
+    if (!conversationId) {
+      setHistoryLoaded(true);
+      return;
+    }
+
     const loadHistory = async () => {
       const { data } = await supabase
         .from("chat_messages")
         .select("role, content, images, created_at")
         .eq("user_id", user.id)
+        .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true })
         .limit(100);
       if (data && data.length > 0) {
@@ -51,20 +65,20 @@ const ChatInterface = () => {
       setHistoryLoaded(true);
     };
     loadHistory();
-  }, [user]);
+  }, [user, conversationId]);
 
-  // Save a message to the database
   const saveMessage = useCallback(
     async (msg: ChatMessage) => {
-      if (!user) return;
+      if (!user || !conversationId) return;
       await supabase.from("chat_messages").insert({
         user_id: user.id,
         role: msg.role,
         content: msg.content,
         images: msg.images || [],
+        conversation_id: conversationId,
       });
     },
-    [user]
+    [user, conversationId]
   );
 
   const handleVoiceResult = useCallback((text: string) => {
@@ -110,7 +124,12 @@ const ChatInterface = () => {
 
   const send = async (text: string, images?: string[]) => {
     const hasContent = text.trim() || (images && images.length > 0);
-    if (!hasContent || isLoading || !session?.access_token) return;
+    if (!hasContent || isLoading || !session?.access_token || !conversationId) return;
+
+    // Auto-title on first message
+    if (messages.length === 0 && text.trim() && onFirstMessage) {
+      onFirstMessage(text.trim());
+    }
 
     const userMsg: ChatMessage = {
       role: "user",
@@ -123,7 +142,6 @@ const ChatInterface = () => {
     setPendingImages([]);
     setIsLoading(true);
 
-    // Save user message
     saveMessage(userMsg);
 
     let assistantContent = "";
@@ -146,7 +164,6 @@ const ChatInterface = () => {
         onDelta: upsertAssistant,
         onDone: () => {
           setIsLoading(false);
-          // Save completed assistant message
           if (assistantContent) {
             saveMessage({ role: "assistant", content: assistantContent });
           }
@@ -182,6 +199,14 @@ const ChatInterface = () => {
     if (hour < 17) return "Afternoon";
     return "Evening";
   };
+
+  if (!conversationId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-8">
+        <h2 className="text-lg font-semibold text-muted-foreground">Select or start a chat</h2>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
