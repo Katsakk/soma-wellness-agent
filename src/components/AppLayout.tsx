@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { Home, UtensilsCrossed, Dumbbell, Calendar, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import somaLogo from "@/assets/soma-logo.png";
 
 const navItems = [
   { to: "/", icon: Home, label: "Home" },
@@ -41,8 +42,8 @@ export const AppLayout = () => {
 
       {/* Desktop side nav */}
       <nav className="fixed left-0 top-0 bottom-0 z-50 hidden w-20 flex-col items-center border-r bg-card/80 backdrop-blur-lg py-6 md:flex">
-        <div className="mb-8 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-sm">
-          AH
+        <div className="mb-8">
+          <img src={somaLogo} alt="SOMA" className="h-10 w-10 object-contain" />
         </div>
         <div className="flex flex-1 flex-col items-center gap-2">
           {navItems.map((item) => (
