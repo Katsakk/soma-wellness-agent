@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Activity, Heart, Zap } from "lucide-react";
+import somaLogo from "@/assets/soma-logo.png";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -46,8 +47,8 @@ const Auth = () => {
       {/* Left side — branding */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-primary p-12 text-primary-foreground">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Adaptive Health</h1>
-          <p className="mt-1 text-primary-foreground/70">Your AI wellness coach</p>
+          <img src={somaLogo} alt="SOMA" className="h-12 w-auto brightness-0 invert" />
+          <p className="mt-2 text-primary-foreground/70">Your Adaptive Health Agent</p>
         </div>
         <div className="space-y-8">
           <div className="flex items-start gap-4">
@@ -85,7 +86,7 @@ const Auth = () => {
           </div>
         </div>
         <p className="text-xs text-primary-foreground/40">
-          © 2026 Adaptive Health Agent
+          © 2026 SOMA
         </p>
       </div>
 
@@ -93,8 +94,8 @@ const Auth = () => {
       <div className="flex w-full lg:w-1/2 items-center justify-center p-6">
         <Card className="w-full max-w-md border-0 shadow-none lg:border lg:shadow-sm">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground lg:hidden">
-              <Activity className="h-6 w-6" />
+            <div className="mx-auto mb-4 lg:hidden">
+              <img src={somaLogo} alt="SOMA" className="h-10 w-auto mx-auto" />
             </div>
             <CardTitle className="text-2xl">{isLogin ? "Welcome back" : "Create account"}</CardTitle>
             <CardDescription>
