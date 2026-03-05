@@ -7,31 +7,22 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/** Extract plain text from a message's content (string or multimodal array) */
 function getTextContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    return content
-      .filter((c: any) => c.type === "text")
-      .map((c: any) => c.text)
-      .join(" ");
+    return content.filter((c: any) => c.type === "text").map((c: any) => c.text).join(" ");
   }
   return "";
 }
 
-/** Check if a message has images */
 function hasImages(content: unknown): boolean {
   if (!Array.isArray(content)) return false;
   return content.some((c: any) => c.type === "image_url");
 }
 
-/** Extract image URLs from message content */
 function getImageUrls(content: unknown): string[] {
   if (!Array.isArray(content)) return [];
-  return content
-    .filter((c: any) => c.type === "image_url")
-    .map((c: any) => c.image_url?.url)
-    .filter(Boolean);
+  return content.filter((c: any) => c.type === "image_url").map((c: any) => c.image_url?.url).filter(Boolean);
 }
 
 serve(async (req) => {
@@ -67,7 +58,6 @@ serve(async (req) => {
 
     const userId = claimsData.claims.sub as string;
 
-    // Fetch user context in parallel
     const [goalsRes, prefsRes, mealsRes, workoutsRes, memoryRes, profileRes] = await Promise.all([
       supabase.from("goals").select("*").eq("user_id", userId).eq("is_active", true).limit(5),
       supabase.from("preferences").select("*").eq("user_id", userId).limit(1),
@@ -112,23 +102,24 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
 
 ## Guidelines
 - Reference their actual data when answering questions about nutrition, activity, or progress.
-- When the user shares a food photo (plate, menu, fridge, grocery items), carefully analyze the image to identify ALL visible food items, estimate portions and serving sizes, and provide a detailed macro breakdown. Be specific about what you see.
-- For restaurant menus, identify items the user might be interested in and provide nutritional estimates.
+- When the user shares a food photo, carefully analyze the image to identify ALL visible food items, estimate portions, and provide a detailed macro breakdown.
+- For restaurant menus, identify items and provide nutritional estimates.
 - For fridge or pantry photos, suggest meals based on visible ingredients with estimated macros.
 - When a user tells you about food they ate (text or image), confirm you've logged it for them.
-- When data is missing, suggest they log meals or connect integrations.
+- When a user tells you about a workout or activity they completed (e.g. "I just ran 5k", "did 30 min yoga", "went for a swim"), confirm you've logged it for them and provide encouraging feedback.
+- When generating workout plans, provide structured exercises with sets, reps, and rest periods.
+- When data is missing, suggest they log meals or workouts.
 - For workout generation, ask about available time, equipment, and location if not specified.
 - Be encouraging but honest about gaps in their routine.
 - Keep responses under 300 words unless the user asks for detail.`;
 
-    // Get last user message for meal extraction
     const lastUserMsg = messages[messages.length - 1];
     const lastUserText = getTextContent(lastUserMsg?.content || "");
     const lastUserImages = getImageUrls(lastUserMsg?.content || "");
     const messageHasImages = lastUserImages.length > 0;
 
-    // Fire meal extraction in parallel (non-blocking)
-    const mealExtractionPromise = extractAndLogMeal(
+    // Fire extraction in parallel (non-blocking) — handles both meals and workouts
+    const extractionPromise = extractAndLogActivity(
       lastUserText,
       lastUserImages,
       userId,
@@ -136,7 +127,6 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
       LOVABLE_API_KEY
     );
 
-    // Use a vision-capable model when images are present
     const model = messageHasImages ? "google/gemini-2.5-flash" : "google/gemini-3-flash-preview";
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -153,25 +143,22 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
     });
 
     if (!response.ok) {
-      await mealExtractionPromise.catch(() => {});
+      await extractionPromise.catch(() => {});
 
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (response.status === 402) {
         return new Response(JSON.stringify({ error: "AI usage limit reached. Please add credits." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const t = await response.text();
       console.error("AI gateway error:", response.status, t);
       return new Response(JSON.stringify({ error: "AI service unavailable" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -189,7 +176,7 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
       } catch (e) {
         console.error("Stream error:", e);
       } finally {
-        await mealExtractionPromise.catch((e) => console.error("Meal extraction error:", e));
+        await extractionPromise.catch((e) => console.error("Extraction error:", e));
         await writer.close();
       }
     })();
@@ -206,7 +193,7 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
   }
 });
 
-async function extractAndLogMeal(
+async function extractAndLogActivity(
   userText: string,
   imageUrls: string[],
   userId: string,
@@ -216,32 +203,49 @@ async function extractAndLogMeal(
   if (!userText && imageUrls.length === 0) return;
 
   try {
-    // Build multimodal content for extraction
     const extractionContent: any[] = [];
 
     const promptText = imageUrls.length > 0
-      ? `Analyze the image(s) and the user's message to identify food items. The image could be a plate of food, a restaurant menu, a fridge, or grocery items. Identify ALL food items visible, estimate portions, and calculate macros.
+      ? `Analyze the image(s) and the user's message. Determine if they are describing:
+1. Food they ate/are eating — extract meal details
+2. A workout or physical activity they completed — extract workout details
+3. Neither — return {"type": "none"}
 
 User message: "${userText || "(no text, just the image)"}"
 
-If food is detected, return JSON: {"is_meal": true, "name": "descriptive meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
-If NOT food-related, return: {"is_meal": false}
-Return ONLY valid JSON, no markdown.`
-      : `Analyze the user's message. If they are describing food they ate or are eating, extract meal info with estimated macros. If NOT about food, return {"is_meal": false}.
+Return ONLY valid JSON (no markdown) in one of these formats:
+
+For meals:
+{"type": "meal", "name": "descriptive meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
+
+For workouts/activities:
+{"type": "workout", "name": "workout name", "workout_type": "cardio|strength|flexibility|sports|hiit|other", "duration": number_in_minutes, "calories_burned": number_estimate}
+
+If neither food nor exercise:
+{"type": "none"}`
+      : `Analyze the user's message. Determine if they are describing:
+1. Food they ate or are eating (e.g. "I had pasta", "just ate a sandwich")
+2. A workout or physical activity they completed (e.g. "I ran 5k", "did 30 min yoga", "went swimming for an hour", "just finished a HIIT session", "walked 10,000 steps")
+3. Neither
 
 User message: "${userText}"
 
-If meal detected: {"is_meal": true, "name": "descriptive meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
-If NOT a meal: {"is_meal": false}
-Return ONLY valid JSON, no markdown.`;
+Return ONLY valid JSON (no markdown) in one of these formats:
+
+For meals:
+{"type": "meal", "name": "descriptive meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
+
+For workouts/activities:
+{"type": "workout", "name": "workout name", "workout_type": "cardio|strength|flexibility|sports|hiit|other", "duration": number_in_minutes, "calories_burned": number_estimate}
+
+If neither food nor exercise:
+{"type": "none"}`;
 
     extractionContent.push({ type: "text", text: promptText });
-
     for (const url of imageUrls) {
       extractionContent.push({ type: "image_url", image_url: { url } });
     }
 
-    // Use vision model when images are present
     const model = imageUrls.length > 0 ? "google/gemini-2.5-flash" : "google/gemini-2.5-flash-lite";
 
     const extractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -263,7 +267,7 @@ Return ONLY valid JSON, no markdown.`;
     });
 
     if (!extractionResponse.ok) {
-      console.error("Meal extraction API error:", extractionResponse.status);
+      console.error("Extraction API error:", extractionResponse.status);
       return;
     }
 
@@ -277,29 +281,37 @@ Return ONLY valid JSON, no markdown.`;
     try {
       parsed = JSON.parse(cleanedContent);
     } catch {
-      console.error("Failed to parse meal extraction JSON:", cleanedContent);
+      console.error("Failed to parse extraction JSON:", cleanedContent);
       return;
     }
 
-    if (!parsed.is_meal) return;
-
-    const { error } = await supabase.from("meals").insert({
-      user_id: userId,
-      name: parsed.name || "Unnamed meal",
-      calories: parsed.calories || null,
-      protein: parsed.protein || null,
-      carbs: parsed.carbs || null,
-      fats: parsed.fats || null,
-      source: "ai_estimate",
-      meal_time: new Date().toISOString(),
-    });
-
-    if (error) {
-      console.error("Failed to insert meal:", error);
-    } else {
-      console.log("Auto-logged meal:", parsed.name);
+    if (parsed.type === "meal") {
+      const { error } = await supabase.from("meals").insert({
+        user_id: userId,
+        name: parsed.name || "Unnamed meal",
+        calories: parsed.calories || null,
+        protein: parsed.protein || null,
+        carbs: parsed.carbs || null,
+        fats: parsed.fats || null,
+        source: "ai_estimate",
+        meal_time: new Date().toISOString(),
+      });
+      if (error) console.error("Failed to insert meal:", error);
+      else console.log("Auto-logged meal:", parsed.name);
+    } else if (parsed.type === "workout") {
+      const { error } = await supabase.from("workouts").insert({
+        user_id: userId,
+        name: parsed.name || "Unnamed workout",
+        workout_type: parsed.workout_type || "other",
+        duration: parsed.duration || null,
+        calories_burned: parsed.calories_burned || null,
+        source: "ai_estimate",
+        completed_at: new Date().toISOString(),
+      });
+      if (error) console.error("Failed to insert workout:", error);
+      else console.log("Auto-logged workout:", parsed.name);
     }
   } catch (e) {
-    console.error("Meal extraction error:", e);
+    console.error("Extraction error:", e);
   }
 }
