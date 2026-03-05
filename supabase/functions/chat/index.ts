@@ -217,11 +217,13 @@ async function extractAndLogActivity(
       ? recentWorkouts.map((w) => `- id="${w.id}" name="${w.name}" type=${w.workout_type || "?"} duration=${w.duration || "?"}min calories_burned=${w.calories_burned || "?"}cal`).join("\n")
       : "None";
 
-    const baseInstructions = `Analyze the user's message. Determine if they are:
+    const baseInstructions = `Analyze the user's message. The user may describe MULTIPLE activities in a single message (e.g. a workout AND a meal). Extract ALL of them.
+
+Determine if they are:
 1. Describing food they ate or are eating → extract meal details
 2. Describing a workout or physical activity → extract workout details
 3. Providing corrections, updates, or additional details about an ALREADY LOGGED meal or workout → update existing entry
-4. Neither → return {"action": "none"}
+4. Neither → return {"actions": []}
 
 ## Already Logged Meals (today):
 ${existingMealsContext}
@@ -233,22 +235,16 @@ IMPORTANT: If the user is clearly referring to an already-logged entry (e.g. add
 
 User message: "${userText || "(no text, just the image)"}"
 
-Return ONLY valid JSON (no markdown) in one of these formats:
+Return ONLY valid JSON (no markdown). Always return an object with an "actions" array containing ALL extracted activities:
 
-New meal:
-{"action": "create", "type": "meal", "name": "meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
+{"actions": [
+  {"action": "create", "type": "meal", "name": "meal name", "calories": number, "protein": number, "carbs": number, "fats": number},
+  {"action": "create", "type": "workout", "name": "workout name", "workout_type": "cardio|strength|flexibility|sports|hiit|other", "duration": number_in_minutes, "calories_burned": number},
+  {"action": "update", "type": "meal", "id": "existing-meal-id", "calories": number},
+  {"action": "update", "type": "workout", "id": "existing-workout-id", "duration": number, "calories_burned": number}
+]}
 
-New workout:
-{"action": "create", "type": "workout", "name": "workout name", "workout_type": "cardio|strength|flexibility|sports|hiit|other", "duration": number_in_minutes, "calories_burned": number}
-
-Update existing meal (include ONLY fields that changed):
-{"action": "update", "type": "meal", "id": "existing-meal-id", "name": "updated name", "calories": number, "protein": number, "carbs": number, "fats": number}
-
-Update existing workout (include ONLY fields that changed):
-{"action": "update", "type": "workout", "id": "existing-workout-id", "name": "updated name", "workout_type": "type", "duration": number, "calories_burned": number}
-
-Neither food nor exercise:
-{"action": "none"}`;
+If nothing to extract: {"actions": []}`;
 
     const extractionContent: any[] = [{ type: "text", text: baseInstructions }];
     for (const url of imageUrls) {
@@ -289,57 +285,66 @@ Neither food nor exercise:
       return;
     }
 
-    if (parsed.action === "none") return;
+    // Support both old single-action format and new multi-action format
+    const actions: any[] = parsed.actions
+      ? parsed.actions
+      : parsed.action && parsed.action !== "none"
+        ? [parsed]
+        : [];
 
-    if (parsed.action === "update") {
-      if (parsed.type === "meal" && parsed.id) {
-        const updates: Record<string, any> = {};
-        if (parsed.name) updates.name = parsed.name;
-        if (parsed.calories != null) updates.calories = parsed.calories;
-        if (parsed.protein != null) updates.protein = parsed.protein;
-        if (parsed.carbs != null) updates.carbs = parsed.carbs;
-        if (parsed.fats != null) updates.fats = parsed.fats;
+    if (actions.length === 0) return;
 
-        const { error } = await supabase.from("meals").update(updates).eq("id", parsed.id).eq("user_id", userId);
-        if (error) console.error("Failed to update meal:", error);
-        else console.log("Updated meal:", parsed.id, updates);
-      } else if (parsed.type === "workout" && parsed.id) {
-        const updates: Record<string, any> = {};
-        if (parsed.name) updates.name = parsed.name;
-        if (parsed.workout_type) updates.workout_type = parsed.workout_type;
-        if (parsed.duration != null) updates.duration = parsed.duration;
-        if (parsed.calories_burned != null) updates.calories_burned = parsed.calories_burned;
+    for (const item of actions) {
+      if (item.action === "update") {
+        if (item.type === "meal" && item.id) {
+          const updates: Record<string, any> = {};
+          if (item.name) updates.name = item.name;
+          if (item.calories != null) updates.calories = item.calories;
+          if (item.protein != null) updates.protein = item.protein;
+          if (item.carbs != null) updates.carbs = item.carbs;
+          if (item.fats != null) updates.fats = item.fats;
 
-        const { error } = await supabase.from("workouts").update(updates).eq("id", parsed.id).eq("user_id", userId);
-        if (error) console.error("Failed to update workout:", error);
-        else console.log("Updated workout:", parsed.id, updates);
-      }
-    } else if (parsed.action === "create") {
-      if (parsed.type === "meal") {
-        const { error } = await supabase.from("meals").insert({
-          user_id: userId,
-          name: parsed.name || "Unnamed meal",
-          calories: parsed.calories || null,
-          protein: parsed.protein || null,
-          carbs: parsed.carbs || null,
-          fats: parsed.fats || null,
-          source: "ai_estimate",
-          meal_time: new Date().toISOString(),
-        });
-        if (error) console.error("Failed to insert meal:", error);
-        else console.log("Auto-logged meal:", parsed.name);
-      } else if (parsed.type === "workout") {
-        const { error } = await supabase.from("workouts").insert({
-          user_id: userId,
-          name: parsed.name || "Unnamed workout",
-          workout_type: parsed.workout_type || "other",
-          duration: parsed.duration || null,
-          calories_burned: parsed.calories_burned || null,
-          source: "ai_estimate",
-          completed_at: new Date().toISOString(),
-        });
-        if (error) console.error("Failed to insert workout:", error);
-        else console.log("Auto-logged workout:", parsed.name);
+          const { error } = await supabase.from("meals").update(updates).eq("id", item.id).eq("user_id", userId);
+          if (error) console.error("Failed to update meal:", error);
+          else console.log("Updated meal:", item.id, updates);
+        } else if (item.type === "workout" && item.id) {
+          const updates: Record<string, any> = {};
+          if (item.name) updates.name = item.name;
+          if (item.workout_type) updates.workout_type = item.workout_type;
+          if (item.duration != null) updates.duration = item.duration;
+          if (item.calories_burned != null) updates.calories_burned = item.calories_burned;
+
+          const { error } = await supabase.from("workouts").update(updates).eq("id", item.id).eq("user_id", userId);
+          if (error) console.error("Failed to update workout:", error);
+          else console.log("Updated workout:", item.id, updates);
+        }
+      } else if (item.action === "create") {
+        if (item.type === "meal") {
+          const { error } = await supabase.from("meals").insert({
+            user_id: userId,
+            name: item.name || "Unnamed meal",
+            calories: item.calories || null,
+            protein: item.protein || null,
+            carbs: item.carbs || null,
+            fats: item.fats || null,
+            source: "ai_estimate",
+            meal_time: new Date().toISOString(),
+          });
+          if (error) console.error("Failed to insert meal:", error);
+          else console.log("Auto-logged meal:", item.name);
+        } else if (item.type === "workout") {
+          const { error } = await supabase.from("workouts").insert({
+            user_id: userId,
+            name: item.name || "Unnamed workout",
+            workout_type: item.workout_type || "other",
+            duration: item.duration || null,
+            calories_burned: item.calories_burned || null,
+            source: "ai_estimate",
+            completed_at: new Date().toISOString(),
+          });
+          if (error) console.error("Failed to insert workout:", error);
+          else console.log("Auto-logged workout:", item.name);
+        }
       }
     }
   } catch (e) {
