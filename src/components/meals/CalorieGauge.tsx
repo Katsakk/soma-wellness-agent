@@ -14,10 +14,9 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
   const radius = (size - strokeWidth) / 2 - 10;
   const center = size / 2;
 
-  // Arc from 100° to 440° (340° sweep) — nearly a full circle
-  // Gap at bottom-left
-  const startAngle = 100;
-  const sweepAngle = 340;
+  // Arc from 120° to 420° (300° sweep) — gap at bottom
+  const startAngle = 120;
+  const sweepAngle = 300;
   const endAngle = startAngle + sweepAngle;
 
   const polarToCartesian = (angle: number) => {
@@ -60,19 +59,20 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
         )}
         {/* Center content: icon above text */}
         <g transform={`translate(${center}, ${center})`}>
-          {/* Fire icon */}
-          <g transform="translate(-10, -38)">
+          {/* Fire icon — positioned well above the number */}
+          <g transform="translate(-12, -46)">
             <Flame
-              width={20}
-              height={20}
+              width={24}
+              height={24}
               stroke="hsl(var(--warning))"
-              fill="none"
+              fill="hsl(var(--warning))"
+              opacity={0.85}
             />
           </g>
           {/* Remaining number */}
           <text
             textAnchor="middle"
-            y={2}
+            y={0}
             className="fill-foreground"
             style={{ fontSize: "36px", fontWeight: 700 }}
           >
@@ -81,23 +81,27 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
           {/* Label */}
           <text
             textAnchor="middle"
-            y={20}
+            y={18}
             className="fill-muted-foreground"
             style={{ fontSize: "12px" }}
           >
             Remaining
           </text>
         </g>
-        {/* Target label at bottom */}
-        <text
-          textAnchor="middle"
-          x={center}
-          y={size - 4}
-          className="fill-muted-foreground"
-          style={{ fontSize: "11px" }}
-        >
-          Target: {target.toLocaleString()} kcal
-        </text>
+        {/* Target label at end of arc (right side) */}
+        {(() => {
+          const endPos = polarToCartesian(endAngle);
+          return (
+            <text
+              x={endPos.x + 14}
+              y={endPos.y + 4}
+              className="fill-muted-foreground"
+              style={{ fontSize: "11px", fontWeight: 500 }}
+            >
+              {target.toLocaleString()}
+            </text>
+          );
+        })()}
       </svg>
     </div>
   );
