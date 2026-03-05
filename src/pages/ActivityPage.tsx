@@ -79,6 +79,9 @@ const ActivityPage = () => {
       flexibility: "🧘 Flexibility",
       sports: "⚽ Sports",
       hiit: "🔥 HIIT",
+      full_body: "🏋️ Full Body",
+      upper_body: "💪 Upper Body",
+      lower_body: "🦵 Lower Body",
       other: "🏋️ General",
     };
     return labels[type || "other"] || labels.other;
