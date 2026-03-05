@@ -57,6 +57,7 @@ const Profile = () => {
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [connectedIntegrations, setConnectedIntegrations] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!user) return;
@@ -88,6 +89,14 @@ const Profile = () => {
     supabase.from("preferences").select("*").eq("user_id", user.id).maybeSingle().then(({ data }) => {
       if (data) setPrefs({ dietary_preferences: data.dietary_preferences || [], workout_preferences: data.workout_preferences || [], units: data.units || "metric" });
       setPrefsLoaded(true);
+    });
+    // Load integrations status
+    supabase.from("integrations").select("provider, status").eq("user_id", user.id).then(({ data }) => {
+      if (data) {
+        const map: Record<string, string> = {};
+        data.forEach((i) => { map[i.provider] = i.status || "disconnected"; });
+        setConnectedIntegrations(map);
+      }
     });
   }, [user]);
 
@@ -241,18 +250,26 @@ const Profile = () => {
               { id: "gmail", name: "Gmail", description: "Scan booking emails", icon: Mail, color: "text-destructive", bgColor: "bg-destructive/10" },
               { id: "strava", name: "Strava", description: "Import runs & rides", icon: Activity, color: "text-primary", bgColor: "bg-primary/10" },
               { id: "oura", name: "Oura", description: "Sync ring activity", icon: Moon, color: "text-accent-foreground", bgColor: "bg-accent" },
-            ].map((int) => (
-              <button
-                key={int.id}
-                onClick={() => toast.info(`${int.name} integration coming soon!`)}
-                className="flex flex-col items-center gap-2 rounded-xl border bg-card p-4 hover:bg-muted transition-colors cursor-pointer"
-              >
-                <div className={`rounded-lg ${int.bgColor} p-3`}>
-                  <int.icon className={`h-6 w-6 ${int.color}`} />
-                </div>
-                <span className="text-xs font-medium">{int.name}</span>
-              </button>
-            ))}
+            ].map((int) => {
+              const status = connectedIntegrations[int.id];
+              const isConnected = status === "connected";
+              return (
+                <button
+                  key={int.id}
+                  onClick={() => toast.info(`${int.name} integration coming soon!`)}
+                  className="relative flex flex-col items-center gap-2 rounded-xl border bg-card p-4 hover:bg-muted transition-colors cursor-pointer"
+                >
+                  <div className={`rounded-lg ${int.bgColor} p-3`}>
+                    <int.icon className={`h-6 w-6 ${int.color}`} />
+                  </div>
+                  <span className="text-xs font-medium">{int.name}</span>
+                  <span className={`absolute top-2 right-2 inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${isConnected ? "bg-green-500/15 text-green-600" : "bg-muted text-muted-foreground"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${isConnected ? "bg-green-500" : "bg-muted-foreground/50"}`} />
+                    {isConnected ? "On" : "Off"}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
