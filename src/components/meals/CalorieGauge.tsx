@@ -69,14 +69,14 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
               opacity={0.85}
             />
           </g>
-          {/* Remaining number */}
+          {/* Consumed number */}
           <text
             textAnchor="middle"
             y={0}
             className="fill-foreground"
             style={{ fontSize: "36px", fontWeight: 700 }}
           >
-            {remaining}
+            {consumed}
           </text>
           {/* Label */}
           <text
@@ -85,7 +85,7 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
             className="fill-muted-foreground"
             style={{ fontSize: "12px" }}
           >
-            Remaining
+            Consumed
           </text>
         </g>
         {/* Target label at end of arc (right side) */}
