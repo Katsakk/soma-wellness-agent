@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { LogOut, Target, Settings, Link, Loader2, Check, Pencil, Camera } from "lucide-react";
+import { LogOut, Target, Settings, Link, Loader2, Check, Pencil, Camera, Mail, Activity, Moon } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import GoalsDialog, { type GoalsData } from "@/components/profile/GoalsDialog";
@@ -235,8 +235,25 @@ const Profile = () => {
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><Link className="h-4 w-4" /> Integrations</CardTitle></CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">Connect Gmail, Strava, and Oura to sync your health data.</p>
-          <Button variant="outline" size="sm" className="mt-3">Manage integrations</Button>
+          <p className="text-sm text-muted-foreground mb-3">Connect services to automatically sync your health data.</p>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { id: "gmail", name: "Gmail", description: "Scan booking emails", icon: Mail, color: "text-destructive", bgColor: "bg-destructive/10" },
+              { id: "strava", name: "Strava", description: "Import runs & rides", icon: Activity, color: "text-primary", bgColor: "bg-primary/10" },
+              { id: "oura", name: "Oura", description: "Sync ring activity", icon: Moon, color: "text-accent-foreground", bgColor: "bg-accent" },
+            ].map((int) => (
+              <button
+                key={int.id}
+                onClick={() => toast.info(`${int.name} integration coming soon!`)}
+                className="flex flex-col items-center gap-2 rounded-xl border bg-card p-4 hover:bg-muted transition-colors cursor-pointer"
+              >
+                <div className={`rounded-lg ${int.bgColor} p-3`}>
+                  <int.icon className={`h-6 w-6 ${int.color}`} />
+                </div>
+                <span className="text-xs font-medium">{int.name}</span>
+              </button>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
