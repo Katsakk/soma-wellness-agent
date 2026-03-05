@@ -1,0 +1,2 @@
+ALTER TABLE public.meals DROP CONSTRAINT meals_source_check;
+ALTER TABLE public.meals ADD CONSTRAINT meals_source_check CHECK (source = ANY (ARRAY['manual'::text, 'voice'::text, 'photo'::text, 'ai_estimate'::text]));
