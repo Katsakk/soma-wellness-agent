@@ -106,7 +106,8 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
 - For restaurant menus, identify items and provide nutritional estimates.
 - For fridge or pantry photos, suggest meals based on visible ingredients with estimated macros.
 - When a user tells you about food they ate (text or image), confirm you've logged it for them.
-- When a user tells you about a workout or activity they completed (e.g. "I just ran 5k", "did 30 min yoga", "went for a swim"), confirm you've logged it for them and provide encouraging feedback.
+- When a user tells you about a workout or activity they completed, confirm you've logged it for them and provide encouraging feedback.
+- When a user provides corrections or additional details about an already-logged meal or workout (e.g. "that run was actually 5k" or "I also had a side salad with that"), confirm you've UPDATED the existing entry (not created a new one).
 - When generating workout plans, provide structured exercises with sets, reps, and rest periods.
 - When data is missing, suggest they log meals or workouts.
 - For workout generation, ask about available time, equipment, and location if not specified.
@@ -124,7 +125,9 @@ Your personality: warm, encouraging, knowledgeable, concise. Use markdown format
       lastUserImages,
       userId,
       supabase,
-      LOVABLE_API_KEY
+      LOVABLE_API_KEY,
+      todayMeals,
+      recentWorkouts
     );
 
     const model = messageHasImages ? "google/gemini-2.5-flash" : "google/gemini-3-flash-preview";
@@ -198,50 +201,56 @@ async function extractAndLogActivity(
   imageUrls: string[],
   userId: string,
   supabase: ReturnType<typeof createClient>,
-  apiKey: string
+  apiKey: string,
+  recentMeals: any[],
+  recentWorkouts: any[]
 ) {
   if (!userText && imageUrls.length === 0) return;
 
   try {
-    const extractionContent: any[] = [];
+    // Build context of existing entries so the AI can detect updates
+    const existingMealsContext = recentMeals.length > 0
+      ? recentMeals.map((m) => `- id="${m.id}" name="${m.name}" calories=${m.calories || "?"} protein=${m.protein || "?"}g carbs=${m.carbs || "?"}g fats=${m.fats || "?"}g`).join("\n")
+      : "None";
 
-    const promptText = imageUrls.length > 0
-      ? `Analyze the image(s) and the user's message. Determine if they are describing:
-1. Food they ate/are eating — extract meal details
-2. A workout or physical activity they completed — extract workout details
-3. Neither — return {"type": "none"}
+    const existingWorkoutsContext = recentWorkouts.length > 0
+      ? recentWorkouts.map((w) => `- id="${w.id}" name="${w.name}" type=${w.workout_type || "?"} duration=${w.duration || "?"}min calories_burned=${w.calories_burned || "?"}cal`).join("\n")
+      : "None";
+
+    const baseInstructions = `Analyze the user's message. Determine if they are:
+1. Describing food they ate or are eating → extract meal details
+2. Describing a workout or physical activity → extract workout details
+3. Providing corrections, updates, or additional details about an ALREADY LOGGED meal or workout → update existing entry
+4. Neither → return {"action": "none"}
+
+## Already Logged Meals (today):
+${existingMealsContext}
+
+## Already Logged Workouts (recent 7 days):
+${existingWorkoutsContext}
+
+IMPORTANT: If the user is clearly referring to an already-logged entry (e.g. adding distance to a run, correcting calories, adding notes about an existing meal), return an "update" action with the matching entry's id. Do NOT create a duplicate.
 
 User message: "${userText || "(no text, just the image)"}"
 
 Return ONLY valid JSON (no markdown) in one of these formats:
 
-For meals:
-{"type": "meal", "name": "descriptive meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
+New meal:
+{"action": "create", "type": "meal", "name": "meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
 
-For workouts/activities:
-{"type": "workout", "name": "workout name", "workout_type": "cardio|strength|flexibility|sports|hiit|other", "duration": number_in_minutes, "calories_burned": number_estimate}
+New workout:
+{"action": "create", "type": "workout", "name": "workout name", "workout_type": "cardio|strength|flexibility|sports|hiit|other", "duration": number_in_minutes, "calories_burned": number}
 
-If neither food nor exercise:
-{"type": "none"}`
-      : `Analyze the user's message. Determine if they are describing:
-1. Food they ate or are eating (e.g. "I had pasta", "just ate a sandwich")
-2. A workout or physical activity they completed (e.g. "I ran 5k", "did 30 min yoga", "went swimming for an hour", "just finished a HIIT session", "walked 10,000 steps")
-3. Neither
+Update existing meal (include ONLY fields that changed):
+{"action": "update", "type": "meal", "id": "existing-meal-id", "name": "updated name", "calories": number, "protein": number, "carbs": number, "fats": number}
 
-User message: "${userText}"
+Update existing workout (include ONLY fields that changed):
+{"action": "update", "type": "workout", "id": "existing-workout-id", "name": "updated name", "workout_type": "type", "duration": number, "calories_burned": number}
 
-Return ONLY valid JSON (no markdown) in one of these formats:
+Neither food nor exercise:
+{"action": "none"}`;
 
-For meals:
-{"type": "meal", "name": "descriptive meal name", "calories": number, "protein": number, "carbs": number, "fats": number}
-
-For workouts/activities:
-{"type": "workout", "name": "workout name", "workout_type": "cardio|strength|flexibility|sports|hiit|other", "duration": number_in_minutes, "calories_burned": number_estimate}
-
-If neither food nor exercise:
-{"type": "none"}`;
-
-    extractionContent.push({ type: "text", text: promptText });
+    const extractionContent: any[] = [{ type: "text", text: baseInstructions }];
     for (const url of imageUrls) {
       extractionContent.push({ type: "image_url", image_url: { url } });
     }
@@ -256,12 +265,7 @@ If neither food nor exercise:
       },
       body: JSON.stringify({
         model,
-        messages: [
-          {
-            role: "user",
-            content: imageUrls.length > 0 ? extractionContent : promptText,
-          },
-        ],
+        messages: [{ role: "user", content: imageUrls.length > 0 ? extractionContent : baseInstructions }],
         temperature: 0.1,
       }),
     });
@@ -285,31 +289,58 @@ If neither food nor exercise:
       return;
     }
 
-    if (parsed.type === "meal") {
-      const { error } = await supabase.from("meals").insert({
-        user_id: userId,
-        name: parsed.name || "Unnamed meal",
-        calories: parsed.calories || null,
-        protein: parsed.protein || null,
-        carbs: parsed.carbs || null,
-        fats: parsed.fats || null,
-        source: "ai_estimate",
-        meal_time: new Date().toISOString(),
-      });
-      if (error) console.error("Failed to insert meal:", error);
-      else console.log("Auto-logged meal:", parsed.name);
-    } else if (parsed.type === "workout") {
-      const { error } = await supabase.from("workouts").insert({
-        user_id: userId,
-        name: parsed.name || "Unnamed workout",
-        workout_type: parsed.workout_type || "other",
-        duration: parsed.duration || null,
-        calories_burned: parsed.calories_burned || null,
-        source: "ai_estimate",
-        completed_at: new Date().toISOString(),
-      });
-      if (error) console.error("Failed to insert workout:", error);
-      else console.log("Auto-logged workout:", parsed.name);
+    if (parsed.action === "none") return;
+
+    if (parsed.action === "update") {
+      if (parsed.type === "meal" && parsed.id) {
+        const updates: Record<string, any> = {};
+        if (parsed.name) updates.name = parsed.name;
+        if (parsed.calories != null) updates.calories = parsed.calories;
+        if (parsed.protein != null) updates.protein = parsed.protein;
+        if (parsed.carbs != null) updates.carbs = parsed.carbs;
+        if (parsed.fats != null) updates.fats = parsed.fats;
+
+        const { error } = await supabase.from("meals").update(updates).eq("id", parsed.id).eq("user_id", userId);
+        if (error) console.error("Failed to update meal:", error);
+        else console.log("Updated meal:", parsed.id, updates);
+      } else if (parsed.type === "workout" && parsed.id) {
+        const updates: Record<string, any> = {};
+        if (parsed.name) updates.name = parsed.name;
+        if (parsed.workout_type) updates.workout_type = parsed.workout_type;
+        if (parsed.duration != null) updates.duration = parsed.duration;
+        if (parsed.calories_burned != null) updates.calories_burned = parsed.calories_burned;
+
+        const { error } = await supabase.from("workouts").update(updates).eq("id", parsed.id).eq("user_id", userId);
+        if (error) console.error("Failed to update workout:", error);
+        else console.log("Updated workout:", parsed.id, updates);
+      }
+    } else if (parsed.action === "create") {
+      if (parsed.type === "meal") {
+        const { error } = await supabase.from("meals").insert({
+          user_id: userId,
+          name: parsed.name || "Unnamed meal",
+          calories: parsed.calories || null,
+          protein: parsed.protein || null,
+          carbs: parsed.carbs || null,
+          fats: parsed.fats || null,
+          source: "ai_estimate",
+          meal_time: new Date().toISOString(),
+        });
+        if (error) console.error("Failed to insert meal:", error);
+        else console.log("Auto-logged meal:", parsed.name);
+      } else if (parsed.type === "workout") {
+        const { error } = await supabase.from("workouts").insert({
+          user_id: userId,
+          name: parsed.name || "Unnamed workout",
+          workout_type: parsed.workout_type || "other",
+          duration: parsed.duration || null,
+          calories_burned: parsed.calories_burned || null,
+          source: "ai_estimate",
+          completed_at: new Date().toISOString(),
+        });
+        if (error) console.error("Failed to insert workout:", error);
+        else console.log("Auto-logged workout:", parsed.name);
+      }
     }
   } catch (e) {
     console.error("Extraction error:", e);
