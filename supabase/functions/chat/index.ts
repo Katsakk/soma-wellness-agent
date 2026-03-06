@@ -251,6 +251,12 @@ IMPORTANT: If the user is clearly referring to an already-logged entry (e.g. add
 
 User message: "${userText || "(no text, just the image)"}"
 
+IMPORTANT ESTIMATION RULES:
+- You MUST ALWAYS provide numeric estimates for ALL nutritional fields (calories, protein, carbs, fats) for meals. NEVER return null or omit these fields. Use your best estimate based on typical portions.
+- You MUST ALWAYS estimate calories_burned for workouts based on workout type and duration. NEVER leave it null. Use standard MET-based estimates.
+- For food images, identify all visible items, estimate portions, and calculate totals.
+- If uncertain, provide your best reasonable estimate rather than omitting the value.
+
 Return ONLY valid JSON (no markdown). Always return an object with an "actions" array containing ALL extracted activities:
 
 {"actions": [
@@ -339,10 +345,10 @@ If nothing to extract: {"actions": []}`;
           const { error } = await supabase.from("meals").insert({
             user_id: userId,
             name: item.name || "Unnamed meal",
-            calories: item.calories || null,
-            protein: item.protein || null,
-            carbs: item.carbs || null,
-            fats: item.fats || null,
+            calories: item.calories ?? null,
+            protein: item.protein ?? null,
+            carbs: item.carbs ?? null,
+            fats: item.fats ?? null,
             source: "ai_estimate",
             meal_time: new Date().toISOString(),
           });
@@ -353,8 +359,8 @@ If nothing to extract: {"actions": []}`;
             user_id: userId,
             name: item.name || "Unnamed workout",
             workout_type: item.workout_type || "other",
-            duration: item.duration || null,
-            calories_burned: item.calories_burned || null,
+            duration: item.duration ?? null,
+            calories_burned: item.calories_burned ?? null,
             source: "ai_estimate",
             completed_at: new Date().toISOString(),
           });
