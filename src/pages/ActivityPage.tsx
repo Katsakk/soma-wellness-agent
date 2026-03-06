@@ -61,6 +61,15 @@ const ActivityPage = () => {
     fetchWorkouts();
   }, [user]);
 
+  // Handle OAuth popup callback: post message to opener and close
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("gmail") === "connected" && window.opener) {
+      window.opener.postMessage({ type: "gmail-connected" }, window.location.origin);
+      window.close();
+    }
+  }, []);
+
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from("workouts").delete().eq("id", id);
     if (error) {

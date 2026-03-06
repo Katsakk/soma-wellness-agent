@@ -112,8 +112,8 @@ const ChatInterface = ({ conversationId, onFirstMessage }: Props) => {
     try {
       const compressed = await Promise.all(toProcess.map((f) => compressImage(f)));
       setPendingImages((prev) => [...prev, ...compressed]);
-    } catch {
-      toast.error("Failed to process image");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to process image");
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -239,7 +239,8 @@ const ChatInterface = ({ conversationId, onFirstMessage }: Props) => {
                 {msg.images && msg.images.length > 0 && (
                   <div className="flex gap-1.5 mb-2 flex-wrap">
                     {msg.images.map((img, j) => (
-                      <img key={j} src={img} alt="Uploaded food" className="rounded-lg max-h-32 max-w-[140px] object-cover" />
+                      <img key={j} src={img} alt="Uploaded food" className="rounded-lg max-h-32 max-w-[140px] object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     ))}
                   </div>
                 )}
@@ -265,7 +266,14 @@ const ChatInterface = ({ conversationId, onFirstMessage }: Props) => {
         <div className="flex gap-2 flex-wrap px-1 pb-2">
           {pendingImages.map((img, i) => (
             <div key={i} className="relative group">
-              <img src={img} alt="Preview" className="h-16 w-16 rounded-lg object-cover border border-border" />
+              <div className="h-16 w-16 rounded-lg border border-border bg-muted flex items-center justify-center overflow-hidden">
+                <img src={img} alt="Preview" className="h-full w-full object-cover"
+                  onError={(e) => {
+                    const el = e.target as HTMLImageElement;
+                    el.style.display = "none";
+                    el.parentElement!.innerHTML += '<span class="text-[10px] text-muted-foreground text-center px-1">Image attached</span>';
+                  }} />
+              </div>
               <button
                 onClick={() => removeImage(i)}
                 className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -297,7 +305,7 @@ const ChatInterface = ({ conversationId, onFirstMessage }: Props) => {
                 <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
                   <Plus className="h-4 w-4" />
                 </Button>
-                <input ref={fileInputRef} type="file" accept="image/*" multiple capture="environment" className="hidden" onChange={handleImageUpload} />
+                <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
               </div>
               <div className="flex items-center gap-1">
                 {voiceSupported && (

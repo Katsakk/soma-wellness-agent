@@ -12,6 +12,7 @@ import { LogOut, Target, Settings, Link, Loader2, Check, Pencil, Camera } from "
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import GoalsDialog, { type GoalsData } from "@/components/profile/GoalsDialog";
+import { useGmailIntegration } from "@/hooks/useGmailIntegration";
 
 const DIETARY_OPTIONS = ["Vegetarian", "Vegan", "Keto", "Paleo", "Gluten-Free", "Dairy-Free", "Low-Carb", "High-Protein"];
 const WORKOUT_OPTIONS = ["Running", "Cycling", "Swimming", "Yoga", "HIIT", "Strength Training", "Pilates", "CrossFit", "Boxing", "Walking"];
@@ -58,6 +59,16 @@ const Profile = () => {
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [connectedIntegrations, setConnectedIntegrations] = useState<Record<string, string>>({});
+  const gmail = useGmailIntegration();
+
+  // Handle OAuth popup callback: post message to opener and close
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("gmail") === "connected" && window.opener) {
+      window.opener.postMessage({ type: "gmail-connected" }, window.location.origin);
+      window.close();
+    }
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -251,13 +262,19 @@ const Profile = () => {
               { id: "strava", name: "Strava", logo: "/logos/strava.svg" },
               { id: "oura", name: "Oura", logo: "/logos/oura.png" },
             ].map((int) => {
-              const status = connectedIntegrations[int.id];
-              const isConnected = status === "connected";
+              const isGmail = int.id === "gmail";
+              const isConnected = isGmail
+                ? gmail.status === "connected"
+                : connectedIntegrations[int.id] === "connected";
+              const handleClick = isGmail
+                ? () => gmail.connect("/profile")
+                : () => toast.info(`${int.name} integration coming soon!`);
               return (
                 <button
                   key={int.id}
-                  onClick={() => toast.info(`${int.name} integration coming soon!`)}
-                  className="relative flex flex-col items-center gap-2 rounded-xl border bg-card p-4 hover:bg-muted transition-colors cursor-pointer"
+                  onClick={handleClick}
+                  disabled={isGmail && gmail.status === "loading"}
+                  className="relative flex flex-col items-center gap-2 rounded-xl border bg-card p-4 hover:bg-muted transition-colors cursor-pointer disabled:opacity-50"
                 >
                   <div className="rounded-lg bg-muted p-3">
                     <img src={int.logo} alt={int.name} className="h-6 w-6 object-contain" />

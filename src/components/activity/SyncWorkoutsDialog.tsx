@@ -1,20 +1,23 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, RefreshCw } from "lucide-react";
+import { useGmailIntegration } from "@/hooks/useGmailIntegration";
 import { toast } from "sonner";
 
 interface SyncWorkoutsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSynced?: () => void;
 }
 
-const integrations = [
-  { id: "gmail", name: "Gmail", description: "Scan booking emails", logo: "/logos/gmail.svg" },
-  { id: "strava", name: "Strava", description: "Import runs & rides", logo: "/logos/strava.svg" },
-  { id: "oura", name: "Oura", description: "Sync ring activity", logo: "/logos/oura.png" },
-];
+const SyncWorkoutsDialog = ({ open, onOpenChange, onSynced }: SyncWorkoutsDialogProps) => {
+  const gmail = useGmailIntegration();
 
-const SyncWorkoutsDialog = ({ open, onOpenChange }: SyncWorkoutsDialogProps) => {
-  const handleConnect = (id: string, name: string) => {
-    toast.info(`${name} integration coming soon!`);
+  const handleGmailClick = () => {
+    if (gmail.status === "disconnected") {
+      gmail.connect("/activity");
+    } else if (gmail.status === "connected") {
+      gmail.sync(() => { onSynced?.(); onOpenChange(false); });
+    }
   };
 
   return (
@@ -26,19 +29,67 @@ const SyncWorkoutsDialog = ({ open, onOpenChange }: SyncWorkoutsDialogProps) => 
         <p className="text-sm text-muted-foreground">
           Connect a service to automatically import your workouts.
         </p>
-        <div className="grid grid-cols-3 gap-3 pt-2">
-          {integrations.map((int) => (
-            <button
-              key={int.id}
-              onClick={() => handleConnect(int.id, int.name)}
-              className="flex flex-col items-center gap-2 rounded-xl border bg-card p-4 hover:bg-muted transition-colors cursor-pointer"
-            >
-              <div className="rounded-lg bg-muted p-3">
-                <img src={int.logo} alt={int.name} className="h-6 w-6 object-contain" />
-              </div>
-              <span className="text-xs font-medium">{int.name}</span>
-            </button>
-          ))}
+        <div className="space-y-2 pt-2">
+          {/* Gmail */}
+          <button
+            onClick={handleGmailClick}
+            disabled={gmail.status === "loading" || gmail.syncing}
+            className="w-full flex items-center gap-3 rounded-xl border bg-card p-3 hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            <div className="rounded-lg bg-muted p-2 shrink-0">
+              <img src="/logos/gmail.svg" alt="Gmail" className="h-5 w-5 object-contain" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-medium">Gmail</p>
+              <p className="text-xs text-muted-foreground">
+                {gmail.status === "loading" && "Checking…"}
+                {gmail.status === "disconnected" && "Scan booking confirmation emails"}
+                {gmail.status === "connected" && (gmail.lastSyncAt
+                  ? `Last synced ${new Date(gmail.lastSyncAt).toLocaleDateString()}`
+                  : "Ready to sync")}
+              </p>
+            </div>
+            <div className="shrink-0">
+              {gmail.status === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {gmail.status === "disconnected" && <span className="text-xs font-medium text-primary">Connect</span>}
+              {gmail.status === "connected" && !gmail.syncing && (
+                <span className="flex items-center gap-1 text-xs font-medium text-primary">
+                  <RefreshCw className="h-3.5 w-3.5" /> Sync
+                </span>
+              )}
+              {gmail.syncing && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+            </div>
+          </button>
+
+          {/* Strava */}
+          <button
+            onClick={() => toast.info("Strava integration coming soon!")}
+            className="w-full flex items-center gap-3 rounded-xl border bg-card p-3 hover:bg-muted transition-colors opacity-60"
+          >
+            <div className="rounded-lg bg-muted p-2 shrink-0">
+              <img src="/logos/strava.svg" alt="Strava" className="h-5 w-5 object-contain" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-medium">Strava</p>
+              <p className="text-xs text-muted-foreground">Import runs & rides</p>
+            </div>
+            <span className="text-xs text-muted-foreground shrink-0">Soon</span>
+          </button>
+
+          {/* Oura */}
+          <button
+            onClick={() => toast.info("Oura integration coming soon!")}
+            className="w-full flex items-center gap-3 rounded-xl border bg-card p-3 hover:bg-muted transition-colors opacity-60"
+          >
+            <div className="rounded-lg bg-muted p-2 shrink-0">
+              <img src="/logos/oura.png" alt="Oura" className="h-5 w-5 object-contain" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-medium">Oura</p>
+              <p className="text-xs text-muted-foreground">Sync ring activity</p>
+            </div>
+            <span className="text-xs text-muted-foreground shrink-0">Soon</span>
+          </button>
         </div>
       </DialogContent>
     </Dialog>

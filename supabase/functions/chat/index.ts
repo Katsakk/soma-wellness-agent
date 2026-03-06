@@ -30,8 +30,8 @@ serve(async (req) => {
 
   try {
     const { messages } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
+    if (!GOOGLE_AI_API_KEY) throw new Error("GOOGLE_AI_API_KEY is not configured");
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -141,17 +141,17 @@ serve(async (req) => {
       lastUserImages,
       userId,
       supabase,
-      LOVABLE_API_KEY,
+      GOOGLE_AI_API_KEY,
       todayMeals,
       recentWorkouts
     );
 
-    const model = messageHasImages ? "google/gemini-2.5-flash" : "google/gemini-3-flash-preview";
+    const model = messageHasImages ? "gemini-2.5-flash" : "gemini-2.5-flash";
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${GOOGLE_AI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -273,9 +273,9 @@ If nothing to extract: {"actions": []}`;
       extractionContent.push({ type: "image_url", image_url: { url } });
     }
 
-    const model = imageUrls.length > 0 ? "google/gemini-2.5-flash" : "google/gemini-2.5-flash-lite";
+    const model = imageUrls.length > 0 ? "gemini-2.5-flash" : "gemini-2.5-flash-lite";
 
-    const extractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const extractionResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
