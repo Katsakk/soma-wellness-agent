@@ -18,30 +18,18 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const body = await req.json().catch(() => ({}));
+    const userId: string = body.userId;
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "userId is required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
-
-    const token = authHeader.replace("Bearer ", "");
-    let userId: string;
-    try {
-      const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-      if (!payload.sub) throw new Error("no sub");
-      userId = payload.sub as string;
-    } catch {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     // Get Gmail tokens
     const { data: integration, error: intErr } = await supabase
@@ -74,6 +62,7 @@ serve(async (req) => {
     }
 
     const { messages = [] } = await listRes.json();
+    console.log(`Gmail query returned ${messages.length} messages`);
 
     // Load existing gmail_sync fingerprints to deduplicate
     const { data: existingWorkouts } = await supabase
@@ -106,16 +95,33 @@ serve(async (req) => {
         const from = headers["from"] || "";
         const subject = headers["subject"] || "";
 
-        if (!shouldProcess(from, subject)) continue;
+        console.log(`[msg ${id}] from="${from}" subject="${subject}"`);
+
+        if (!shouldProcess(from, subject)) {
+          console.log(`[msg ${id}] skipped by shouldProcess`);
+          continue;
+        }
 
         // Skip cancellation emails
-        if (/cancel/i.test(subject)) continue;
+        if (/cancel/i.test(subject)) {
+          console.log(`[msg ${id}] skipped: cancellation`);
+          continue;
+        }
 
         const bodyText = extractBody(msg.payload);
-        if (!bodyText) continue;
+        if (!bodyText) {
+          console.log(`[msg ${id}] skipped: no body`);
+          continue;
+        }
+
+        console.log(`[msg ${id}] body preview: ${bodyText.slice(0, 300)}`);
 
         const booking = parseBooking(from, subject, bodyText);
-        if (!booking) continue;
+        if (!booking) {
+          console.log(`[msg ${id}] parseBooking returned null`);
+          continue;
+        }
+        console.log(`[msg ${id}] parsed: ${JSON.stringify(booking)}`);
 
         // Deduplication by fingerprint
         if (seenFingerprints.has(booking.fingerprint)) continue;
@@ -228,17 +234,20 @@ function extractBody(payload: any): string {
     return payload.mimeType === "text/html" ? stripHtml(raw) : raw;
   }
 
-  // Multipart: prefer text/plain, fallback to text/html
+  // Multipart: prefer text/plain if substantial, otherwise use HTML
   if (payload.parts) {
     let htmlPart = "";
+    let textPart = "";
     for (const part of payload.parts) {
       const text = extractBody(part);
       if (!text) continue;
-      if (part.mimeType === "text/plain") return text;
-      if (part.mimeType === "text/html") htmlPart = stripHtml(text);
-      if (part.mimeType?.startsWith("multipart/")) return text;
+      if (part.mimeType === "text/plain") textPart = text;
+      else if (part.mimeType === "text/html") htmlPart = text;
+      else if (part.mimeType?.startsWith("multipart/")) return text;
     }
-    return htmlPart;
+    // Only use text/plain if it has meaningful content (>100 non-whitespace chars)
+    if (textPart.replace(/\s+/g, "").length > 100) return textPart;
+    return htmlPart || textPart;
   }
 
   return "";

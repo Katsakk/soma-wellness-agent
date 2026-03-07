@@ -33,8 +33,9 @@ export function useGmailIntegration() {
       if (e.origin !== window.location.origin) return;
       if (e.data?.type === "gmail-connected") {
         setStatus("connected");
-        toast.success("Gmail connected!");
+        toast.success("Gmail connected! Syncing workouts…");
         refresh();
+        runSync();
       }
     };
     window.addEventListener("message", handler);
@@ -42,11 +43,10 @@ export function useGmailIntegration() {
   }, [refresh]);
 
   const connect = useCallback(async (returnTo = window.location.pathname) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!user) return;
 
     const { data, error } = await supabase.functions.invoke("gmail-auth", {
-      body: { origin: window.location.origin, returnTo },
+      body: { userId: user.id, origin: window.location.origin, returnTo },
     });
 
     if (error || !data?.url) {
@@ -82,17 +82,19 @@ export function useGmailIntegration() {
           .maybeSingle();
         if (row?.status === "connected") {
           setStatus("connected");
-          toast.success("Gmail connected!");
+          toast.success("Gmail connected! Syncing workouts…");
+          await runSync();
         }
       }
     }, 600);
   }, [user, refresh]);
 
-  const sync = useCallback(async (onSuccess?: () => void) => {
-    if (status !== "connected") return;
+  const runSync = useCallback(async (onSuccess?: () => void) => {
     setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("gmail-sync");
+      const { data, error } = await supabase.functions.invoke("gmail-sync", {
+        body: { userId: user?.id },
+      });
       if (error) throw new Error(error.message);
       const count = data?.imported ?? 0;
       toast.success(
@@ -107,7 +109,12 @@ export function useGmailIntegration() {
     } finally {
       setSyncing(false);
     }
-  }, [status]);
+  }, [user]);
+
+  const sync = useCallback(async (onSuccess?: () => void) => {
+    if (status !== "connected") return;
+    await runSync(onSuccess);
+  }, [status, runSync]);
 
   const disconnect = useCallback(async () => {
     if (!user) return;

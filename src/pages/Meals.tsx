@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, UtensilsCrossed, Flame, Drumstick, Wheat, Droplets, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { Plus, UtensilsCrossed, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -34,18 +33,25 @@ interface Meal {
 
 const DEFAULT_TARGETS = { calories: 2000, protein: 100, carbs: 250, fats: 67 };
 
+const MACRO_CONFIG = [
+  { key: "calories" as const, label: "Calories", unit: "kcal", colorToken: "--metric-calories" },
+  { key: "protein"  as const, label: "Protein",  unit: "g",    colorToken: "--metric-protein"  },
+  { key: "carbs"    as const, label: "Carbs",    unit: "g",    colorToken: "--metric-carbs"    },
+  { key: "fats"     as const, label: "Fat",      unit: "g",    colorToken: "--metric-fat"      },
+];
+
 const Meals = () => {
   const { user } = useAuth();
   const [todayMeals, setTodayMeals] = useState<Meal[]>([]);
-  const [allMeals, setAllMeals] = useState<Meal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
+  const [allMeals, setAllMeals]     = useState<Meal[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [open, setOpen]             = useState(false);
   const [description, setDescription] = useState("");
   const [estimating, setEstimating] = useState(false);
-  const [estimate, setEstimate] = useState<MacroEstimate | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState("today");
-  const [targets, setTargets] = useState(DEFAULT_TARGETS);
+  const [estimate, setEstimate]     = useState<MacroEstimate | null>(null);
+  const [saving, setSaving]         = useState(false);
+  const [tab, setTab]               = useState("today");
+  const [targets, setTargets]       = useState(DEFAULT_TARGETS);
 
   const fetchMeals = async () => {
     if (!user) return;
@@ -54,24 +60,11 @@ const Meals = () => {
     const monthStart = subDays(new Date(), 30);
 
     const [todayRes, allRes, goalsRes] = await Promise.all([
-      supabase
-        .from("meals")
-        .select("*")
-        .eq("user_id", user.id)
-        .gte("meal_time", todayStart.toISOString())
-        .order("meal_time", { ascending: false }),
-      supabase
-        .from("meals")
-        .select("*")
-        .eq("user_id", user.id)
-        .gte("meal_time", monthStart.toISOString())
-        .order("meal_time", { ascending: false }),
-      supabase
-        .from("goals")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .limit(1),
+      supabase.from("meals").select("*").eq("user_id", user.id)
+        .gte("meal_time", todayStart.toISOString()).order("meal_time", { ascending: false }),
+      supabase.from("meals").select("*").eq("user_id", user.id)
+        .gte("meal_time", monthStart.toISOString()).order("meal_time", { ascending: false }),
+      supabase.from("goals").select("*").eq("user_id", user.id).eq("is_active", true).limit(1),
     ]);
 
     setTodayMeals(todayRes.data || []);
@@ -81,17 +74,15 @@ const Meals = () => {
       const g = goalsRes.data[0];
       setTargets({
         calories: g.target_calories || DEFAULT_TARGETS.calories,
-        protein: g.target_protein || DEFAULT_TARGETS.protein,
-        carbs: g.target_carbs || DEFAULT_TARGETS.carbs,
-        fats: g.target_fats || DEFAULT_TARGETS.fats,
+        protein:  g.target_protein  || DEFAULT_TARGETS.protein,
+        carbs:    g.target_carbs    || DEFAULT_TARGETS.carbs,
+        fats:     g.target_fats     || DEFAULT_TARGETS.fats,
       });
     }
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchMeals();
-  }, [user]);
+  useEffect(() => { fetchMeals(); }, [user]);
 
   const handleEstimate = async () => {
     if (!description.trim()) return;
@@ -116,14 +107,14 @@ const Meals = () => {
     setSaving(true);
     try {
       const { error } = await supabase.from("meals").insert({
-        user_id: user.id,
-        name: estimate.name,
+        user_id:  user.id,
+        name:     estimate.name,
         calories: Math.round(estimate.calories),
-        protein: Math.round(estimate.protein),
-        carbs: Math.round(estimate.carbs),
-        fats: Math.round(estimate.fats),
-        notes: description.trim(),
-        source: "ai_estimate",
+        protein:  Math.round(estimate.protein),
+        carbs:    Math.round(estimate.carbs),
+        fats:     Math.round(estimate.fats),
+        notes:    description.trim(),
+        source:   "ai_estimate",
       });
       if (error) throw error;
       toast.success("Meal logged!");
@@ -150,18 +141,22 @@ const Meals = () => {
   };
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
+    <div className="mx-auto max-w-lg px-4 py-8 space-y-6 pb-32">
+
+      {/* ── Header ─────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Meals</h1>
-          <p className="text-muted-foreground text-sm mt-1">Track your daily nutrition</p>
+          <h1 className="text-2xl font-bold tracking-tight">Food</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Track your daily nutrition</p>
         </div>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setDescription(""); setEstimate(null); } }}>
           <DialogTrigger asChild>
-            <Button size="sm">
-              <Plus className="h-4 w-4 mr-1" /> Log meal
+            <Button size="sm" className="gap-1.5">
+              <Plus className="h-4 w-4" /> Log meal
             </Button>
           </DialogTrigger>
+
+          {/* ── Log meal dialog ─────────────────────────────────── */}
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Log a meal</DialogTitle>
@@ -175,30 +170,49 @@ const Meals = () => {
                   onKeyDown={(e) => e.key === "Enter" && !estimating && handleEstimate()}
                   disabled={estimating}
                 />
-                <Button onClick={handleEstimate} disabled={estimating || !description.trim()} size="sm" className="shrink-0">
-                  {estimating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                <Button
+                  onClick={handleEstimate}
+                  disabled={estimating || !description.trim()}
+                  size="sm"
+                  className="shrink-0"
+                >
+                  {estimating
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <Sparkles className="h-4 w-4" />}
                 </Button>
               </div>
 
               {estimating && (
-                <div className="flex items-center justify-center py-8 text-muted-foreground text-sm gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Estimating macros…
+                <div className="flex items-center justify-center py-8 gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Estimating macros…
                 </div>
               )}
 
               {estimate && (
-                <div className="space-y-3">
-                  <p className="font-semibold text-sm">{estimate.name}</p>
+                <div className="space-y-4">
+                  <p className="font-semibold text-sm text-foreground">{estimate.name}</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <MacroCard icon={Flame} label="Calories" value={`${Math.round(estimate.calories)}`} unit="kcal" color="text-primary" />
-                    <MacroCard icon={Drumstick} label="Protein" value={`${Math.round(estimate.protein)}`} unit="g" color="text-accent" />
-                    <MacroCard icon={Wheat} label="Carbs" value={`${Math.round(estimate.carbs)}`} unit="g" color="text-warning" />
-                    <MacroCard icon={Droplets} label="Fats" value={`${Math.round(estimate.fats)}`} unit="g" color="text-destructive" />
+                    {MACRO_CONFIG.map(({ key, label, unit, colorToken }) => (
+                      <div key={key} className="surface-elevated p-3 flex items-center gap-2.5">
+                        <div
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: `hsl(var(${colorToken}))` }}
+                        />
+                        <div>
+                          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+                            {label}
+                          </p>
+                          <p className="text-sm font-bold" style={{ color: `hsl(var(${colorToken}))` }}>
+                            {Math.round(estimate[key])}
+                            <span className="text-xs font-normal text-muted-foreground ml-0.5">{unit}</span>
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                   <p className="text-xs text-muted-foreground">AI-estimated values. Adjust as needed.</p>
                   <Button onClick={handleSave} disabled={saving} className="w-full">
-                    {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                     Save meal
                   </Button>
                 </div>
@@ -208,105 +222,112 @@ const Meals = () => {
         </Dialog>
       </div>
 
-      {/* Time period tabs */}
+      {/* ── Time period tabs ────────────────────────────────────── */}
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="w-full">
-          <TabsTrigger value="today" className="flex-1">Today</TabsTrigger>
-          <TabsTrigger value="weekly" className="flex-1">Weekly</TabsTrigger>
+          <TabsTrigger value="today"   className="flex-1">Today</TabsTrigger>
+          <TabsTrigger value="weekly"  className="flex-1">Weekly</TabsTrigger>
           <TabsTrigger value="monthly" className="flex-1">Monthly</TabsTrigger>
         </TabsList>
 
+        {/* ── Today ─────────────────────────────────────────────── */}
         <TabsContent value="today" className="mt-4 space-y-4">
           {loading ? (
             <div className="flex justify-center py-16">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : todayMeals.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="rounded-xl bg-muted p-4 mb-4">
-                  <UtensilsCrossed className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="font-semibold">No meals logged today</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Describe what you ate and AI will estimate the macros
-                </p>
-              </CardContent>
-            </Card>
+            <EmptyState
+              icon={UtensilsCrossed}
+              colorToken="--metric-calories"
+              title="No meals logged today"
+              subtitle="Describe what you ate and AI will estimate the macros"
+            />
           ) : (
             <>
               <TodayMealsView meals={todayMeals} targets={targets} />
               <div className="space-y-2">
                 {todayMeals.map((meal) => (
-                  <Card key={meal.id} className="group">
-                    <CardContent className="flex items-center justify-between p-4">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm truncate">{meal.name}</p>
-                        <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                          <span>{meal.calories ?? 0} kcal</span>
-                          <span>{meal.protein ?? 0}g P</span>
-                          <span>{meal.carbs ?? 0}g C</span>
-                          <span>{meal.fats ?? 0}g F</span>
-                        </div>
-                        {meal.notes && (
-                          <p className="text-xs text-muted-foreground mt-1 truncate italic">"{meal.notes}"</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-3">
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(meal.meal_time), "h:mm a")}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => handleDelete(meal.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <MealCard key={meal.id} meal={meal} onDelete={handleDelete} />
                 ))}
               </div>
             </>
           )}
         </TabsContent>
 
+        {/* ── Weekly ────────────────────────────────────────────── */}
         <TabsContent value="weekly" className="mt-4">
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <WeeklyMealsView meals={allMeals} />
-          )}
+          {loading
+            ? <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            : <WeeklyMealsView meals={allMeals} />}
         </TabsContent>
 
+        {/* ── Monthly ───────────────────────────────────────────── */}
         <TabsContent value="monthly" className="mt-4">
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <MonthlyMealsView meals={allMeals} />
-          )}
+          {loading
+            ? <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            : <MonthlyMealsView meals={allMeals} />}
         </TabsContent>
       </Tabs>
     </div>
   );
 };
 
-function MacroCard({ icon: Icon, label, value, unit, color }: { icon: any; label: string; value: string; unit: string; color: string }) {
+// ── Meal card ─────────────────────────────────────────────────────────────────
+
+function MealCard({ meal, onDelete }: { meal: Meal; onDelete: (id: string) => void }) {
   return (
-    <div className="rounded-lg border bg-card p-3 flex items-center gap-2">
-      <Icon className={`h-4 w-4 ${color}`} />
-      <div>
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="font-semibold text-sm">
-          {value} <span className="text-xs font-normal text-muted-foreground">{unit}</span>
-        </p>
+    <div className="surface-elevated p-4 flex items-center justify-between group">
+      <div className="flex items-start gap-3 min-w-0 flex-1">
+        <div
+          className="mt-1 w-2 h-2 rounded-full shrink-0"
+          style={{ backgroundColor: "hsl(var(--metric-calories))" }}
+        />
+        <div className="min-w-0">
+          <p className="font-medium text-sm text-foreground truncate">{meal.name}</p>
+          <div className="flex flex-wrap gap-x-3 mt-1 text-xs text-muted-foreground">
+            <span style={{ color: "hsl(var(--metric-calories))" }}>{meal.calories ?? 0} kcal</span>
+            <span>{meal.protein ?? 0}g protein</span>
+            <span>{meal.carbs ?? 0}g carbs</span>
+            <span>{meal.fats ?? 0}g fat</span>
+          </div>
+          {meal.notes && (
+            <p className="text-xs text-muted-foreground mt-1 truncate italic">"{meal.notes}"</p>
+          )}
+        </div>
       </div>
+      <div className="flex items-center gap-2 shrink-0 ml-3">
+        <span className="text-xs text-muted-foreground">
+          {format(new Date(meal.meal_time), "h:mm a")}
+        </span>
+        <button
+          className="h-7 w-7 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10"
+          onClick={() => onDelete(meal.id)}
+        >
+          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+function EmptyState({
+  icon: Icon, colorToken, title, subtitle,
+}: {
+  icon: React.ElementType; colorToken: string; title: string; subtitle: string;
+}) {
+  return (
+    <div className="surface-elevated flex flex-col items-center justify-center py-16 text-center px-6">
+      <div
+        className="flex items-center justify-center w-14 h-14 rounded-2xl mb-4"
+        style={{ backgroundColor: `hsl(var(${colorToken}) / 0.12)` }}
+      >
+        <Icon className="h-6 w-6" style={{ color: `hsl(var(${colorToken}))` }} />
+      </div>
+      <h3 className="font-semibold text-foreground">{title}</h3>
+      <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{subtitle}</p>
     </div>
   );
 }

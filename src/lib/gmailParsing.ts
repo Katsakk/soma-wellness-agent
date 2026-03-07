@@ -13,7 +13,9 @@ export function extractEmail(from: string): string {
 
 export function shouldProcess(from: string, subject: string): boolean {
   if (APPROVED_SENDERS.includes(extractEmail(from))) return true;
-  return /\b(reservation|booking)\b/i.test(subject);
+  // Barry's sends via ZingFit — match on display name containing barrysbootcamp.sg
+  if (from.toLowerCase().includes("barrysbootcamp.sg")) return true;
+  return /\b(reservation|booking|booked)\b/i.test(subject);
 }
 
 export type WorkoutType =
@@ -260,7 +262,7 @@ export function parseBooking(from: string, subject: string, bodyText: string): P
 
   if (sender === "team@info.classpass.com") {
     partial = parseClassPassEmail(subject, bodyText);
-  } else if (sender === "hello@barrysbootcamp.sg") {
+  } else if (sender === "hello@barrysbootcamp.sg" || from.toLowerCase().includes("barrysbootcamp.sg")) {
     partial = parseBarrysEmail(subject, bodyText);
   } else {
     // Subject-matched email: try both parsers

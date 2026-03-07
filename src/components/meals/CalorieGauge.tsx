@@ -52,7 +52,7 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
         <path
           d={describeArc(startAngle, progressAngle)}
           fill="none"
-          stroke="hsl(var(--warning))"
+          stroke="hsl(var(--metric-calories))"
           strokeWidth={strokeWidth}
           strokeLinecap="round" />
         }
@@ -62,8 +62,8 @@ const CalorieGauge = ({ consumed, target }: CalorieGaugeProps) => {
             <Flame
               width={24}
               height={24}
-              stroke="hsl(var(--warning))"
-              fill="hsl(var(--warning))"
+              stroke="hsl(var(--metric-calories))"
+              fill="hsl(var(--metric-calories))"
               opacity={0.85} />
           </g>
           <text

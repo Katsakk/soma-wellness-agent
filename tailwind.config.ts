@@ -50,6 +50,17 @@ export default {
         warning: "hsl(var(--warning))",
         success: "hsl(var(--success))",
         info: "hsl(var(--info))",
+        metric: {
+          calories:  "hsl(var(--metric-calories))",
+          protein:   "hsl(var(--metric-protein))",
+          fiber:     "hsl(var(--metric-fiber))",
+          hydration: "hsl(var(--metric-hydration))",
+          activity:  "hsl(var(--metric-activity))",
+          ai:        "hsl(var(--metric-ai))",
+          over:      "hsl(var(--metric-over))",
+          carbs:     "hsl(var(--metric-carbs))",
+          fat:       "hsl(var(--metric-fat))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -65,8 +76,19 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        xl: "calc(var(--radius) + 4px)",
+        "2xl": "calc(var(--radius) + 8px)",
+      },
+      boxShadow: {
+        card:    "var(--shadow-card)",
+        "glow-ai":      "var(--glow-ai)",
+        "glow-primary": "var(--glow-primary)",
       },
       keyframes: {
+        "mic-pulse": {
+          "0%, 100%": { boxShadow: "0 0 0 0 hsl(var(--metric-ai) / 0.5)" },
+          "50%":       { boxShadow: "0 0 0 12px hsl(var(--metric-ai) / 0)" },
+        },
         "accordion-down": {
           from: {
             height: "0",
@@ -86,7 +108,8 @@ export default {
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
+        "accordion-up":   "accordion-up 0.2s ease-out",
+        "mic-pulse":      "mic-pulse 1.5s ease-in-out infinite",
       },
     },
   },
