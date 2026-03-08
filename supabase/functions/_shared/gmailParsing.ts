@@ -252,7 +252,8 @@ export function parseBarrysEmail(subject: string, body: string): Partial_ | null
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function extractLabeledField(body: string, label: string): string | null {
-  const re = new RegExp(`\\b${label}\\s*:?\\s*([^\\n\\r]{2,80})`, "i");
+  // Require a colon so "ClassPass" is never matched by label "class"
+  const re = new RegExp(`\\b${label}\\s*:\\s*([^\\n\\r]{2,80})`, "i");
   const m = body.match(re);
   return m ? m[1].trim() : null;
 }
