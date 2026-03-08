@@ -15,7 +15,9 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signIn, signUp, user } = useAuth();
+  const [otpStep, setOtpStep] = useState(false);
+  const [otp, setOtp] = useState("");
+  const { signIn, signUp, verifyOtp, user } = useAuth();
   const navigate = useNavigate();
 
   if (user) {
@@ -31,9 +33,14 @@ const Auth = () => {
         await signIn(email, password);
         toast.success("Welcome back!");
         navigate("/");
+      } else if (otpStep) {
+        await verifyOtp(email, otp.trim());
+        toast.success("Email verified! Welcome to SOMA.");
+        navigate("/");
       } else {
         await signUp(email, password, displayName);
-        toast.success("Account created! Check your email to confirm.");
+        setOtpStep(true);
+        toast.success("Check your email for a 6-digit verification code.");
       }
     } catch (error: any) {
       toast.error(error.message);
@@ -97,59 +104,95 @@ const Auth = () => {
             <div className="mx-auto mb-4 lg:hidden">
               <img src={somaLogo} alt="SOMA" className="h-10 w-auto mx-auto" />
             </div>
-            <CardTitle className="text-2xl">{isLogin ? "Welcome back" : "Create account"}</CardTitle>
+            <CardTitle className="text-2xl">
+              {isLogin ? "Welcome back" : otpStep ? "Verify your email" : "Create account"}
+            </CardTitle>
             <CardDescription>
-              {isLogin ? "Sign in to your wellness dashboard" : "Start your health journey today"}
+              {isLogin
+                ? "Sign in to your wellness dashboard"
+                : otpStep
+                ? `Enter the 6-digit code sent to ${email}`
+                : "Start your health journey today"}
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
-              {!isLogin && (
+              {otpStep ? (
                 <div className="space-y-2">
-                  <Label htmlFor="displayName">Display name</Label>
+                  <Label htmlFor="otp">Verification code</Label>
                   <Input
-                    id="displayName"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Your name"
+                    id="otp"
+                    type="text"
+                    inputMode="numeric"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    required
+                    maxLength={6}
+                    className="text-center text-2xl tracking-widest"
+                    autoFocus
                   />
                 </div>
+              ) : (
+                <>
+                  {!isLogin && (
+                    <div className="space-y-2">
+                      <Label htmlFor="displayName">Display name</Label>
+                      <Input
+                        id="displayName"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        placeholder="Your name"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                </>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                />
-              </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-4">
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Loading..." : isLogin ? "Sign in" : "Create account"}
+                {loading ? "Loading..." : isLogin ? "Sign in" : otpStep ? "Verify email" : "Create account"}
               </Button>
-              <button
-                type="button"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setIsLogin(!isLogin)}
-              >
-                {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
-              </button>
+              {otpStep ? (
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => { setOtpStep(false); setOtp(""); }}
+                >
+                  Back to sign up
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setIsLogin(!isLogin)}
+                >
+                  {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+                </button>
+              )}
             </CardFooter>
           </form>
         </Card>
