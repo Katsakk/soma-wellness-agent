@@ -147,7 +147,7 @@ const Index = () => {
 
     Promise.all([
       supabase.from("meals")
-        .select("calories, protein, carbs, fats, fiber")
+        .select("*")
         .eq("user_id", user.id)
         .gte("meal_time", todayStart.toISOString()),
       supabase.from("workouts")
