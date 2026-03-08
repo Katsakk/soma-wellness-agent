@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, UtensilsCrossed, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { Plus, UtensilsCrossed, Loader2, Sparkles, Trash2, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -33,6 +33,21 @@ interface Meal {
 
 const DEFAULT_TARGETS = { calories: 2000, protein: 100, carbs: 250, fats: 67 };
 
+const MEAL_TYPES = [
+  { value: "breakfast", label: "Breakfast", icon: "☀️" },
+  { value: "lunch",     label: "Lunch",     icon: "🥗" },
+  { value: "dinner",    label: "Dinner",    icon: "🌙" },
+  { value: "snack",     label: "Snack",     icon: "🍎" },
+] as const;
+type MealType = typeof MEAL_TYPES[number]["value"];
+
+const MEAL_SUGGESTIONS: Record<MealType, string[]> = {
+  breakfast: ["Overnight oats with banana", "Eggs and avocado toast", "Greek yoghurt with berries", "Protein smoothie"],
+  lunch:     ["Chicken salad wrap", "Salmon rice bowl", "Lentil soup", "Grilled chicken with quinoa"],
+  dinner:    ["Steak with sweet potato", "Pasta with turkey bolognese", "Salmon with vegetables", "Stir-fry chicken and rice"],
+  snack:     ["Protein bar", "Apple with peanut butter", "Cottage cheese", "Handful of nuts"],
+};
+
 const MACRO_CONFIG = [
   { key: "calories" as const, label: "Calories", unit: "kcal", colorToken: "--metric-calories" },
   { key: "protein"  as const, label: "Protein",  unit: "g",    colorToken: "--metric-protein"  },
@@ -46,6 +61,7 @@ const Meals = () => {
   const [allMeals, setAllMeals]     = useState<Meal[]>([]);
   const [loading, setLoading]       = useState(true);
   const [open, setOpen]             = useState(false);
+  const [mealType, setMealType]     = useState<MealType>("breakfast");
   const [description, setDescription] = useState("");
   const [estimating, setEstimating] = useState(false);
   const [estimate, setEstimate]     = useState<MacroEstimate | null>(null);
@@ -84,13 +100,14 @@ const Meals = () => {
 
   useEffect(() => { fetchMeals(); }, [user]);
 
-  const handleEstimate = async () => {
-    if (!description.trim()) return;
+  const handleEstimate = async (text = description) => {
+    if (!text.trim()) return;
     setEstimating(true);
     setEstimate(null);
     try {
+      const typeLabel = MEAL_TYPES.find((t) => t.value === mealType)?.label ?? mealType;
       const { data, error } = await supabase.functions.invoke("estimate-macros", {
-        body: { description: description.trim() },
+        body: { description: `${typeLabel}: ${text.trim()}` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -113,7 +130,7 @@ const Meals = () => {
         protein:  Math.round(estimate.protein),
         carbs:    Math.round(estimate.carbs),
         fats:     Math.round(estimate.fats),
-        notes:    description.trim(),
+        notes:    `[${mealType}] ${description.trim()}`,
         source:   "ai_estimate",
       });
       if (error) throw error;
@@ -149,7 +166,7 @@ const Meals = () => {
           <h1 className="text-2xl font-bold tracking-tight">Food</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Track your daily nutrition</p>
         </div>
-        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setDescription(""); setEstimate(null); } }}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setDescription(""); setEstimate(null); setMealType("breakfast"); } }}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-1.5">
               <Plus className="h-4 w-4" /> Log meal
@@ -162,35 +179,84 @@ const Meals = () => {
               <DialogTitle>Log a meal</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+
+              {/* Meal type chips */}
               <div className="flex gap-2">
-                <Input
-                  placeholder="e.g. Grilled chicken with rice and broccoli"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !estimating && handleEstimate()}
-                  disabled={estimating}
-                />
-                <Button
-                  onClick={handleEstimate}
-                  disabled={estimating || !description.trim()}
-                  size="sm"
-                  className="shrink-0"
-                >
-                  {estimating
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <Sparkles className="h-4 w-4" />}
-                </Button>
+                {MEAL_TYPES.map((t) => (
+                  <button
+                    key={t.value}
+                    onClick={() => { setMealType(t.value); setEstimate(null); }}
+                    className={`flex-1 flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border text-xs font-medium transition-all ${
+                      mealType === t.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-secondary text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <span className="text-base leading-none">{t.icon}</span>
+                    {t.label}
+                  </button>
+                ))}
               </div>
 
+              {/* Suggestion chips */}
+              {!estimate && (
+                <div className="flex flex-wrap gap-1.5">
+                  {MEAL_SUGGESTIONS[mealType].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => { setDescription(s); handleEstimate(s); }}
+                      disabled={estimating}
+                      className="text-xs px-3 py-1.5 rounded-full border border-border bg-secondary hover:bg-secondary/70 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Chat-style input */}
+              {!estimate && (
+                <div className="surface-elevated p-3">
+                  <textarea
+                    placeholder={`What did you have for ${MEAL_TYPES.find(t => t.value === mealType)?.label.toLowerCase()}?`}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleEstimate(); } }}
+                    disabled={estimating}
+                    rows={2}
+                    className="w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none leading-relaxed"
+                  />
+                  <div className="flex justify-end mt-2">
+                    <button
+                      onClick={() => handleEstimate()}
+                      disabled={estimating || !description.trim()}
+                      className="h-8 w-8 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all"
+                    >
+                      {estimating
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <Sparkles className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {estimating && (
-                <div className="flex items-center justify-center py-8 gap-2 text-sm text-muted-foreground">
+                <div className="flex items-center justify-center py-6 gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" /> Estimating macros…
                 </div>
               )}
 
               {estimate && (
                 <div className="space-y-4">
-                  <p className="font-semibold text-sm text-foreground">{estimate.name}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-sm text-foreground">{estimate.name}</p>
+                    <button
+                      onClick={() => setEstimate(null)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Edit
+                    </button>
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     {MACRO_CONFIG.map(({ key, label, unit, colorToken }) => (
                       <div key={key} className="surface-elevated p-3 flex items-center gap-2.5">
@@ -210,7 +276,7 @@ const Meals = () => {
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">AI-estimated values. Adjust as needed.</p>
+                  <p className="text-xs text-muted-foreground">AI-estimated values.</p>
                   <Button onClick={handleSave} disabled={saving} className="w-full">
                     {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                     Save meal

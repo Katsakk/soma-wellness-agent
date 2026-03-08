@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -119,6 +119,9 @@ const Index = () => {
   const [targets, setTargets] = useState(DEFAULTS);
   const [loaded, setLoaded] = useState(false);
 
+  const [pendingAutoSend, setPendingAutoSend] = useState<string | null>(null);
+  const chatSectionRef = useRef<HTMLDivElement>(null);
+
   const {
     conversations, activeId, setActiveId, loaded: convsLoaded,
     createConversation, deleteConversation, renameConversation,
@@ -129,6 +132,13 @@ const Index = () => {
       createConversation("New Chat");
     }
   }, [convsLoaded, conversations.length, user, createConversation]);
+
+  const sendToChat = (message: string) => {
+    setPendingAutoSend(message);
+    setTimeout(() => {
+      chatSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -223,7 +233,7 @@ const Index = () => {
       </div>
 
       {/* ── 3. AI Chat ──────────────────────────────────────────── */}
-      <div>
+      <div ref={chatSectionRef}>
         <ConversationList
           conversations={conversations}
           activeId={activeId}
@@ -237,6 +247,8 @@ const Index = () => {
             <ChatInterface
               conversationId={activeId}
               onFirstMessage={(text) => renameConversation(activeId, text.slice(0, 40))}
+              autoSend={pendingAutoSend}
+              onAutoSendComplete={() => setPendingAutoSend(null)}
             />
           </div>
         )}
@@ -367,7 +379,7 @@ const Index = () => {
             title="Meal ideas"
             subtitle="AI-powered suggestions"
             colorToken="--metric-fiber"
-            onClick={() => navigate("/meals")}
+            onClick={() => sendToChat("Given my logged meals and activity for today, what should be my next meal?")}
           />
           <ActionTile
             icon={Dumbbell}
@@ -381,7 +393,7 @@ const Index = () => {
             title="Workout ideas"
             subtitle="Personalized plans"
             colorToken="--metric-protein"
-            onClick={() => navigate("/activity")}
+            onClick={() => sendToChat("Based on my past workouts, goals and meals, recommend 3 activity ideas — including workout type, workout time and reason for this recommendation")}
           />
         </div>
       </div>

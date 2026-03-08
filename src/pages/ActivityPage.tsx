@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, KeyboardEvent } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Dumbbell, RefreshCw, Clock, Flame, Trash2, Loader2 } from "lucide-react";
+import { Dumbbell, RefreshCw, Clock, Flame, Trash2, Loader2, Send, Plus } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { toast } from "sonner";
 import WeeklyActivityView from "@/components/activity/WeeklyActivityView";
@@ -34,6 +35,24 @@ const TYPE_LABELS: Record<string, string> = {
   other:      "General",
 };
 
+const ACTIVITY_SUGGESTIONS = [
+  "30 min run",
+  "45 min HIIT class",
+  "1 hour gym session",
+  "20 min yoga",
+  "45 min cycling",
+  "30 min swim",
+  "Upper body weights",
+  "Lower body strength",
+];
+
+interface WorkoutEstimate {
+  name: string;
+  workout_type: string;
+  duration_minutes: number;
+  calories_burned: number;
+}
+
 const ActivityPage = () => {
   const { user } = useAuth();
   const [todayWorkouts, setTodayWorkouts] = useState<Workout[]>([]);
@@ -41,6 +60,12 @@ const ActivityPage = () => {
   const [loading, setLoading]             = useState(true);
   const [tab, setTab]                     = useState("today");
   const [syncOpen, setSyncOpen]           = useState(false);
+  const [logOpen, setLogOpen]             = useState(false);
+  const [logText, setLogText]             = useState("");
+  const [estimating, setEstimating]       = useState(false);
+  const [saving, setSaving]               = useState(false);
+  const [estimate, setEstimate]           = useState<WorkoutEstimate | null>(null);
+  const logTextareaRef                    = useRef<HTMLTextAreaElement>(null);
 
   const fetchWorkouts = async () => {
     if (!user) return;
@@ -75,6 +100,59 @@ const ActivityPage = () => {
     }
   }, []);
 
+  const handleEstimateWorkout = async (text?: string) => {
+    const input = (text ?? logText).trim();
+    if (!input) return;
+    if (!estimate) setLogText(text ?? logText);
+    setEstimating(true);
+    setEstimate(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("estimate-workout", {
+        body: { description: input },
+      });
+      if (error) throw new Error(error.message);
+      setEstimate(data as WorkoutEstimate);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to estimate workout");
+    } finally {
+      setEstimating(false);
+    }
+  };
+
+  const handleSaveWorkout = async () => {
+    if (!estimate || !user) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("workouts").insert({
+        user_id: user.id,
+        name: estimate.name,
+        workout_type: estimate.workout_type,
+        duration: estimate.duration_minutes,
+        calories_burned: estimate.calories_burned,
+        source: "manual",
+        completed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      });
+      if (error) throw new Error(error.message);
+      toast.success("Workout logged!");
+      setLogOpen(false);
+      setLogText("");
+      setEstimate(null);
+      fetchWorkouts();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to save workout");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLogKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleEstimateWorkout();
+    }
+  };
+
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from("workouts").delete().eq("id", id);
     if (error) {
@@ -95,9 +173,14 @@ const ActivityPage = () => {
           <h1 className="text-2xl font-bold tracking-tight">Activity</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Workouts and exercise history</p>
         </div>
-        <Button size="sm" variant="outline" onClick={() => setSyncOpen(true)} className="gap-1.5">
-          <RefreshCw className="h-4 w-4" /> Sync
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setSyncOpen(true)} className="gap-1.5">
+            <RefreshCw className="h-4 w-4" /> Sync
+          </Button>
+          <Button size="sm" onClick={() => setLogOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Log activity
+          </Button>
+        </div>
       </div>
 
       {/* ── Tabs ───────────────────────────────────────────────── */}
@@ -155,6 +238,97 @@ const ActivityPage = () => {
       </Tabs>
 
       <SyncWorkoutsDialog open={syncOpen} onOpenChange={setSyncOpen} onSynced={fetchWorkouts} />
+
+      {/* ── Log Activity Dialog ────────────────────────────────── */}
+      <Dialog open={logOpen} onOpenChange={(o) => { setLogOpen(o); if (!o) { setLogText(""); setEstimate(null); } }}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-border/60" style={{ background: "hsl(var(--surface-base))" }}>
+          <DialogHeader className="px-5 pt-5 pb-0">
+            <DialogTitle className="text-base font-semibold">Log activity</DialogTitle>
+          </DialogHeader>
+
+          <div className="px-5 pb-5 space-y-4 mt-4">
+            {/* Suggestion chips */}
+            {!estimate && (
+              <div className="flex flex-wrap gap-2">
+                {ACTIVITY_SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => handleEstimateWorkout(s)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-border/60 text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Chat-style input */}
+            {!estimate && (
+              <div className="surface-elevated p-3 flex items-end gap-2">
+                <textarea
+                  ref={logTextareaRef}
+                  value={logText}
+                  onChange={(e) => setLogText(e.target.value)}
+                  onKeyDown={handleLogKeyDown}
+                  placeholder="Describe your workout… e.g. 45 min run at 5k pace"
+                  rows={2}
+                  className="flex-1 bg-transparent resize-none text-sm outline-none placeholder:text-muted-foreground/60 leading-relaxed"
+                />
+                <button
+                  onClick={() => handleEstimateWorkout()}
+                  disabled={!logText.trim() || estimating}
+                  className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
+                >
+                  {estimating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </button>
+              </div>
+            )}
+
+            {/* Estimate result */}
+            {estimating && !estimate && (
+              <div className="surface-elevated p-6 flex items-center justify-center gap-2 text-muted-foreground text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" /> Estimating…
+              </div>
+            )}
+
+            {estimate && (
+              <div className="space-y-3">
+                <div className="surface-elevated p-4 space-y-3">
+                  <p className="font-semibold text-sm">{estimate.name}</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "Type", value: TYPE_LABELS[estimate.workout_type] ?? estimate.workout_type, token: "--metric-activity" },
+                      { label: "Duration", value: `${estimate.duration_minutes} min`, token: "--metric-activity" },
+                      { label: "Calories", value: `${estimate.calories_burned} kcal`, token: "--metric-calories" },
+                    ].map(({ label, value, token }) => (
+                      <div key={label} className="rounded-xl p-3 text-center" style={{ backgroundColor: `hsl(var(${token}) / 0.1)` }}>
+                        <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">{label}</p>
+                        <p className="text-sm font-semibold" style={{ color: `hsl(var(${token}))` }}>{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setEstimate(null); setLogText(""); }}
+                    className="flex-1 py-2 text-sm text-muted-foreground border border-border/60 rounded-xl hover:border-border transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={handleSaveWorkout}
+                    disabled={saving}
+                    className="flex-1 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Save workout
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

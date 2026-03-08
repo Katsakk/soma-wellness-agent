@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.strava-sync]
 verify_jwt = false
+
+[functions.estimate-workout]
+verify_jwt = false

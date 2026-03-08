@@ -18,9 +18,11 @@ const SUGGESTIONS = [
 type Props = {
   conversationId: string | null;
   onFirstMessage?: (text: string) => void;
+  autoSend?: string | null;
+  onAutoSendComplete?: () => void;
 };
 
-const ChatInterface = ({ conversationId, onFirstMessage }: Props) => {
+const ChatInterface = ({ conversationId, onFirstMessage, autoSend, onAutoSendComplete }: Props) => {
   const { session, user } = useAuth();
   const firstName = user?.user_metadata?.display_name?.split(" ")[0] || "there";
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -79,6 +81,14 @@ const ChatInterface = ({ conversationId, onFirstMessage }: Props) => {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
+
+  // Auto-send a message when autoSend prop is provided
+  useEffect(() => {
+    if (!autoSend || !historyLoaded || !conversationId || isLoading) return;
+    send(autoSend);
+    onAutoSendComplete?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSend, historyLoaded, conversationId]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
