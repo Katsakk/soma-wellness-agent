@@ -348,7 +348,19 @@ function WorkoutCard({ workout: w, onDelete }: { workout: Workout; onDelete: (id
           <Dumbbell className="h-4 w-4" style={{ color: "hsl(var(--metric-activity))" }} />
         </div>
         <div className="min-w-0">
-          <p className="font-medium text-sm text-foreground truncate">{w.name}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-medium text-sm text-foreground truncate">{w.name}</p>
+            {w.source === "strava" && (
+              <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-500/15 text-orange-400 uppercase tracking-wide">
+                Strava
+              </span>
+            )}
+            {(w.source === "gmail_sync") && (
+              <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 uppercase tracking-wide">
+                Gmail
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
             <span>{typeLabel}</span>
             {w.duration && (

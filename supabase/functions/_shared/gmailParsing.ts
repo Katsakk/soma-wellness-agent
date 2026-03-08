@@ -4,7 +4,13 @@
 export const APPROVED_SENDERS = [
   "team@info.classpass.com",
   "hello@barrysbootcamp.sg",
+  "no-reply@classpass.com",
+  "noreply@classpass.com",
+  "bookings@classpass.com",
 ];
+
+// Domain patterns for approved fitness senders
+const APPROVED_DOMAINS = ["classpass.com", "barrysbootcamp.sg", "barrys.com"];
 
 export function extractEmail(from: string): string {
   const match = from.match(/<([^>]+)>/) || from.match(/([^\s<>]+@[^\s<>]+)/);
@@ -12,10 +18,13 @@ export function extractEmail(from: string): string {
 }
 
 export function shouldProcess(from: string, subject: string): boolean {
-  if (APPROVED_SENDERS.includes(extractEmail(from))) return true;
+  const email = extractEmail(from);
+  if (APPROVED_SENDERS.includes(email)) return true;
+  // Domain-level matching (catches no-reply@classpass.com etc.)
+  if (APPROVED_DOMAINS.some((d) => email.endsWith("@" + d) || email.endsWith("." + d))) return true;
   // Barry's sends via ZingFit — match on display name containing barrysbootcamp.sg
-  if (from.toLowerCase().includes("barrysbootcamp.sg")) return true;
-  return /\b(reservation|booking|booked)\b/i.test(subject);
+  if (from.toLowerCase().includes("barrysbootcamp.sg") || from.toLowerCase().includes("barry")) return true;
+  return /\b(reservation confirmed|booking confirmed|you'?re booked|class confirmation|booked for)\b/i.test(subject);
 }
 
 export type WorkoutType =
@@ -168,15 +177,32 @@ export function parseClassPassEmail(subject: string, body: string): Partial_ | n
     const date = parseDate(dtPattern[1]);
     const startTime = parseTime(dtPattern[2]);
     const endTime = parseTime(dtPattern[3]);
-    if (!date || !startTime) return null;
-
-    const className = extractClassNameFromBody(body, subject) || "Fitness Class";
-    const studio = extractStudioFromSubjectOrBody(subject, body) || "ClassPass Studio";
-    return { className, studio, date, startTime, endTime, durationMinutes: durationBetween(startTime, endTime) };
+    if (date && startTime) {
+      const className = extractClassNameFromBody(body, subject) || "Fitness Class";
+      const studio = extractStudioFromSubjectOrBody(subject, body) || "ClassPass Studio";
+      return { className, studio, date, startTime, endTime, durationMinutes: durationBetween(startTime, endTime) };
+    }
   }
 
-  // Strategy 2: labeled fields
-  const date = extractLabeledField(body, "date") && parseDate(extractLabeledField(body, "date")!);
+  // Strategy 2: Date on one line, time range on next/nearby line
+  const dateMatch = body.match(/([A-Za-z]+day,?\s+[A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})/i)
+    || body.match(/([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})/i);
+  const timeRangeMatch = body.match(/(\d{1,2}:\d{2}\s*(?:AM|PM))\s*[-–to]+\s*(\d{1,2}:\d{2}\s*(?:AM|PM))/i)
+    || body.match(/(\d{1,2}:\d{2}\s*(?:AM|PM))/i);
+  if (dateMatch && timeRangeMatch) {
+    const date = parseDate(dateMatch[1]);
+    const startTime = parseTime(timeRangeMatch[1]);
+    const endTime = timeRangeMatch[2] ? parseTime(timeRangeMatch[2]) : null;
+    if (date && startTime) {
+      const className = extractClassNameFromBody(body, subject) || "Fitness Class";
+      const studio = extractStudioFromSubjectOrBody(subject, body) || "ClassPass Studio";
+      return { className, studio, date, startTime, endTime, durationMinutes: durationBetween(startTime, endTime) };
+    }
+  }
+
+  // Strategy 3: labeled fields
+  const rawDate = extractLabeledField(body, "date");
+  const date = rawDate ? parseDate(rawDate) : null;
   const timeField = extractLabeledField(body, "time");
   if (date && timeField) {
     const timeParts = timeField.match(/(\d{1,2}:\d{2}\s*(?:AM|PM)?)\s*[-–]\s*(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
@@ -196,15 +222,18 @@ export function parseBarrysEmail(subject: string, body: string): Partial_ | null
 
   const className = extractLabeledField(body, "class")
     || extractLabeledField(body, "session")
+    || matchFirst(body, /Barry'?s\s+([A-Za-z\s]+?)(?:\s+at\s+|\s+on\s+|\s*\n)/i)
     || "Barry's";
 
   const rawDate = extractLabeledField(body, "date")
     || extractLabeledField(body, "when")
     || matchFirst(body, /([A-Za-z]+day,?\s+[A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})/i)
-    || matchFirst(body, /([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})/i);
+    || matchFirst(body, /([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})/i)
+    || matchFirst(body, /(\d{1,2}\s+[A-Za-z]+\s+\d{4})/i);
 
   const rawTime = extractLabeledField(body, "time")
     || extractLabeledField(body, "start")
+    || matchFirst(body, /(\d{1,2}:\d{2}\s*(?:AM|PM)\s*[-–]\s*\d{1,2}:\d{2}\s*(?:AM|PM))/i)
     || matchFirst(body, /(\d{1,2}:\d{2}\s*(?:AM|PM))/i);
 
   if (!rawDate || !rawTime) return null;

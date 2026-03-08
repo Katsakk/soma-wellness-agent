@@ -10,9 +10,24 @@ const corsHeaders = {
 };
 
 const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
-// Approved senders + subject keywords — matches src/lib/gmailParsing.ts
-const GMAIL_QUERY =
-  "newer_than:7d (from:team@info.classpass.com OR from:hello@barrysbootcamp.sg OR subject:reservation OR subject:booking)";
+
+function buildGmailQuery(lastSyncAt: string | null): string {
+  // Use after: based on last sync, or fall back to 90 days
+  let after = "";
+  if (lastSyncAt) {
+    const d = new Date(lastSyncAt);
+    d.setDate(d.getDate() - 1); // 1 day overlap to catch any edge cases
+    after = `after:${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} `;
+  } else {
+    after = "newer_than:90d ";
+  }
+  return (
+    after +
+    "(from:team@info.classpass.com OR from:hello@barrysbootcamp.sg OR from:classpass.com OR " +
+    "subject:\"you're booked\" OR subject:\"you are booked\" OR subject:\"booking confirmed\" OR " +
+    "subject:\"reservation confirmed\" OR subject:\"class confirmation\" OR subject:reservation OR subject:booking)"
+  );
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -34,7 +49,7 @@ serve(async (req) => {
     // Get Gmail tokens
     const { data: integration, error: intErr } = await supabase
       .from("integrations")
-      .select("access_token, refresh_token, metadata")
+      .select("access_token, refresh_token, metadata, last_sync_at")
       .eq("user_id", userId)
       .eq("provider", "gmail")
       .maybeSingle();
@@ -49,7 +64,9 @@ serve(async (req) => {
     const accessToken = await getValidAccessToken(integration, userId, supabase);
 
     // Fetch messages matching our query
-    const listRes = await gmailFetch(accessToken, `/messages?q=${encodeURIComponent(GMAIL_QUERY)}&maxResults=50`);
+    const gmailQuery = buildGmailQuery(integration.last_sync_at ?? null);
+    console.log("Gmail query:", gmailQuery);
+    const listRes = await gmailFetch(accessToken, `/messages?q=${encodeURIComponent(gmailQuery)}&maxResults=100`);
     if (!listRes.ok) {
       const body = await listRes.text();
       console.error("Gmail list error:", listRes.status, body);
