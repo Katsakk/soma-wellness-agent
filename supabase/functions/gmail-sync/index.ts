@@ -11,21 +11,12 @@ const corsHeaders = {
 
 const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
 
-function buildGmailQuery(lastSyncAt: string | null): string {
-  // Use after: based on last sync, or fall back to 90 days
-  let after = "";
-  if (lastSyncAt) {
-    const d = new Date(lastSyncAt);
-    d.setDate(d.getDate() - 1); // 1 day overlap to catch any edge cases
-    after = `after:${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} `;
-  } else {
-    after = "newer_than:90d ";
-  }
+function buildGmailQuery(): string {
+  // Always look back 7 days — fingerprint deduplication prevents re-imports
   return (
-    after +
-    "(from:team@info.classpass.com OR from:hello@barrysbootcamp.sg OR from:classpass.com OR " +
-    "subject:\"you're booked\" OR subject:\"you are booked\" OR subject:\"booking confirmed\" OR " +
-    "subject:\"reservation confirmed\" OR subject:\"class confirmation\" OR subject:reservation OR subject:booking)"
+    "newer_than:7d " +
+    "(from:team@info.classpass.com OR from:hello@barrysbootcamp.sg OR " +
+    "subject:booked OR subject:reservation OR subject:booking OR subject:confirmation)"
   );
 }
 
@@ -49,7 +40,7 @@ serve(async (req) => {
     // Get Gmail tokens
     const { data: integration, error: intErr } = await supabase
       .from("integrations")
-      .select("access_token, refresh_token, metadata, last_sync_at")
+      .select("access_token, refresh_token, metadata")
       .eq("user_id", userId)
       .eq("provider", "gmail")
       .maybeSingle();
@@ -64,7 +55,7 @@ serve(async (req) => {
     const accessToken = await getValidAccessToken(integration, userId, supabase);
 
     // Fetch messages matching our query
-    const gmailQuery = buildGmailQuery(integration.last_sync_at ?? null);
+    const gmailQuery = buildGmailQuery();
     console.log("Gmail query:", gmailQuery);
     const listRes = await gmailFetch(accessToken, `/messages?q=${encodeURIComponent(gmailQuery)}&maxResults=100`);
     if (!listRes.ok) {

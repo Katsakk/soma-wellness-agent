@@ -74,10 +74,12 @@ const ActivityPage = () => {
     const monthStart = subDays(new Date(), 30);
 
     const [todayRes, allRes] = await Promise.all([
+      // Today: filter by completed_at (the actual workout date)
       supabase.from("workouts").select("*").eq("user_id", user.id)
-        .gte("created_at", todayStart.toISOString()).order("created_at", { ascending: false }),
+        .gte("completed_at", todayStart.toISOString()).order("completed_at", { ascending: false }),
+      // Monthly/weekly: filter by completed_at so past synced workouts appear on their actual day
       supabase.from("workouts").select("*").eq("user_id", user.id)
-        .gte("created_at", monthStart.toISOString()).order("created_at", { ascending: false }),
+        .gte("completed_at", monthStart.toISOString()).order("completed_at", { ascending: false }),
     ]);
 
     setTodayWorkouts(todayRes.data || []);
