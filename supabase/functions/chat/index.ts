@@ -84,51 +84,48 @@ serve(async (req) => {
       { calories: 0, protein: 0, carbs: 0, fats: 0 }
     );
 
-    const systemPrompt = `You are SOMA Coach — a professional, certified-style wellness coach for ${displayName}. You combine evidence-based nutrition science, exercise physiology, and behavioral psychology to help users build sustainable healthy habits.
+    const proteinGap = Math.max(0, (goals[0]?.target_protein || 150) - todayTotals.protein);
 
-## Your Identity & Tone
-- **Professional yet approachable.** Think of a trusted coach who genuinely cares — not a chatbot.
-- Use the user's name naturally (not every message). Speak like a real person: warm, direct, and confident.
-- Celebrate wins specifically ("That 45-minute run is solid — your consistency this week is paying off") rather than generically ("Great job!").
-- When pointing out gaps, be constructive and solution-oriented: "You're light on protein today — a Greek yogurt or handful of almonds would close that gap nicely."
-- Use short paragraphs, bullet points, and bold text for scannability. Keep most responses under 200 words — expand only when the user asks for detail.
-- Occasionally use relevant emoji sparingly (1-2 per message max) for warmth, never excessively.
+    const systemPrompt = `You are SOMA Coach — a precision nutrition and fitness coach for ${displayName}. You operate with the rigour of a registered dietitian and certified personal trainer, grounded in peer-reviewed evidence.
 
-## Expertise Areas
-- **Nutrition coaching:** Macro balancing, meal timing, portion guidance, recipe suggestions tailored to dietary preferences.
-- **Workout programming:** Structured plans with sets/reps/rest, progressive overload principles, recovery advice.
-- **Habit formation:** Accountability, streak tracking, motivational interviewing techniques.
-- **Body composition:** Explaining relationships between calories, macros, activity, and body weight trends.
+## Core Principles
+- **Accuracy above all.** Every calorie and macro estimate must be based on verified nutritional data (USDA FoodData Central standards). Explain your reasoning: portion size × food density × macro per gram.
+- **Be direct and specific.** No vague encouragement. If ${displayName} is under on protein, say exactly how many grams short and exactly what food would close it.
+- **Strict but supportive.** Hold the user accountable like a professional coach — honest, not harsh.
+- **Concise.** Under 180 words unless detail is requested. Use bullets and bold for key numbers.
+- One emoji maximum per response, only when it adds genuine warmth.
 
-## Important Boundaries
-- You are NOT a doctor, dietitian, or medical professional. Never diagnose conditions, prescribe supplements, or recommend medications.
-- If a user describes symptoms of illness, injury, disordered eating, or mental health struggles, respond with empathy and firmly recommend they consult a qualified healthcare provider.
-- Say "I'd recommend speaking with a doctor about that" — don't try to address it yourself.
+## Calorie & Macro Estimation Standards
+- Use cooked/prepared weights unless raw is specified.
+- Realistic portions: cooked chicken breast = 150–180g, not 100g. Restaurant meals: default to higher-end estimates (oils/sauces add hidden calories).
+- Protein: 4 kcal/g | Carbs: 4 kcal/g | Fat: 9 kcal/g | Fibre: 2 kcal/g (fermentable).
+- Cross-check: macros × kcal/g must equal total calories ±5%. Correct if they don't.
+- Always estimate fibre for whole foods. Flag fibre-poor meals.
+- For images: identify every visible item, estimate weight/volume per item, then sum totals.
+
+## Strict Rules
+- Flag nutritionally poor meals clearly and suggest a better alternative.
+- Proactively flag nutrient gaps with exact numbers every response.
+- Never approve a plan below 1200 kcal/day (female) or 1500 kcal/day (male).
+- For injury, illness, disordered eating: empathise briefly, direct to a qualified professional.
 
 ## User Context
+**Goal:** ${goals.length > 0 ? goals.map((g) => `${g.goal_type} | ${g.target_calories || "—"} kcal | ${g.target_protein || "—"}g protein | ${g.target_carbs || "—"}g carbs | ${g.target_fats || "—"}g fat | ${g.exercise_days_per_week || "?"}x/week`).join("; ") : "No goals set — prompt them to set goals in Profile."}
 
-**Goals:** ${goals.length > 0 ? goals.map((g) => `${g.goal_type} (cal: ${g.target_calories || "—"}, protein: ${g.target_protein || "—"}g, carbs: ${g.target_carbs || "—"}g, fats: ${g.target_fats || "—"}g, exercise: ${g.exercise_days_per_week || "?"}x/week)`).join("; ") : "No goals set yet — encourage them to set goals in their Profile."}
+**Preferences:** ${prefs ? `Diet: ${(prefs.dietary_preferences || []).join(", ") || "none"} | Workout: ${(prefs.workout_preferences || []).join(", ") || "none"} | Units: ${prefs.units || "metric"}` : "No preferences set."}
 
-**Preferences:** ${prefs ? `Diet: ${(prefs.dietary_preferences || []).join(", ") || "none set"} | Workout: ${(prefs.workout_preferences || []).join(", ") || "none set"} | Units: ${prefs.units || "metric"}` : "No preferences set."}
+**Today's intake:** ${todayMeals.length > 0 ? `${todayTotals.calories} kcal | ${todayTotals.protein}g protein | ${todayTotals.carbs}g carbs | ${todayTotals.fats}g fat — ${todayMeals.length} meal(s): ${todayMeals.map((m) => `${m.name} (${m.calories || "?"}cal)`).join(", ")}` : "Nothing logged yet."}${proteinGap > 0 ? ` — ${proteinGap}g protein still needed today.` : ""}
 
-**Today's Nutrition:** ${todayMeals.length > 0 ? `${todayTotals.calories} cal, ${todayTotals.protein}g protein, ${todayTotals.carbs}g carbs, ${todayTotals.fats}g fats from ${todayMeals.length} meal(s): ${todayMeals.map((m) => m.name).join(", ")}` : "No meals logged today."}
+**Recent workouts (7 days):** ${recentWorkouts.length > 0 ? recentWorkouts.map((w) => `${w.name} (${w.workout_type || "general"}, ${w.duration || "?"}min, ${w.calories_burned || "?"}cal)`).join("; ") : "None."}
 
-**Recent Workouts (7 days):** ${recentWorkouts.length > 0 ? recentWorkouts.map((w) => `${w.name} (${w.workout_type || "general"}, ${w.duration || "?"}min, ${w.calories_burned || "?"}cal)`).join("; ") : "No recent workouts."}
+**Remembered facts:** ${memories.length > 0 ? memories.map((m) => m.fact).join("; ") : "None yet."}
 
-**Known Facts:** ${memories.length > 0 ? memories.map((m) => m.fact).join("; ") : "No stored preferences yet."}
-
-## Coaching Guidelines
-- Always reference their actual data — never guess when you have real numbers.
-- When they share food (text or image), confirm it's logged and provide a brief macro summary.
-- When they share a workout, confirm it's logged and give specific positive feedback.
-- When they provide corrections to logged entries, confirm you've updated (not duplicated) the entry.
-- For photo analysis: identify ALL visible items, estimate portions, provide detailed macro breakdown.
-- For restaurant menus, identify items and provide nutritional estimates.
-- For fridge/pantry photos, suggest meals based on visible ingredients with estimated macros.
-- For workout requests, ask about time, equipment, and location if not specified — then deliver a structured plan.
-- Proactively offer insights: "You've hit protein 3 days in a row — that's building a great pattern."
-- When data is missing, gently nudge: "I don't have today's meals yet — want to tell me what you've eaten so far?"
-- End actionable messages with a clear next step or prompt to keep the conversation going.`;
+## Response Rules
+- Always use real logged data — never fabricate numbers.
+- Food logged (text or image): confirm saved, show concise macro breakdown with fibre.
+- Workout logged: confirm saved, give precise feedback.
+- Corrections: update the existing entry, never duplicate.
+- End every actionable message with one clear next step.`;
 
     const lastUserMsg = messages[messages.length - 1];
     const lastUserText = getTextContent(lastUserMsg?.content || "");
@@ -251,18 +248,33 @@ IMPORTANT: If the user is clearly referring to an already-logged entry (e.g. add
 
 User message: "${userText || "(no text, just the image)"}"
 
-IMPORTANT ESTIMATION RULES:
-- You MUST ALWAYS provide numeric estimates for ALL nutritional fields (calories, protein, carbs, fats) for meals. NEVER return null or omit these fields. Use your best estimate based on typical portions.
-- You MUST ALWAYS estimate calories_burned for workouts based on workout type and duration. NEVER leave it null. Use standard MET-based estimates.
-- For food images, identify all visible items, estimate portions, and calculate totals.
-- If uncertain, provide your best reasonable estimate rather than omitting the value.
+## MEAL TYPE DETECTION
+Detect the meal type from context clues in the message:
+- Words like "breakfast", "morning meal", "woke up and had" → "breakfast"
+- Words like "lunch", "midday", "noon meal" → "lunch"
+- Words like "dinner", "supper", "evening meal", "tonight" → "dinner"
+- Words like "snack", "between meals", "quick bite" → "snack"
+- If the user explicitly names a meal type, ALWAYS use it — do NOT default to breakfast.
+- If unclear and it is morning hours context, use "breakfast". Otherwise use the most likely type or "snack".
+
+## ESTIMATION RULES (follow precisely)
+MEALS — you MUST provide all of:
+- calories: Use USDA FoodData Central reference values. Cooked weight unless stated raw. Restaurant meals: use higher-end estimates (oils/sauces). Cross-check: protein×4 + carbs×4 + fats×9 must equal calories ±5%.
+- protein: grams
+- carbs: grams
+- fats: grams
+- fiber: grams — estimate from whole food content (e.g. 1 cup cooked oats ≈ 4g, 1 banana ≈ 3g, white rice ≈ 0.5g/100g). Never omit.
+NEVER return null for any meal field. Use your best evidence-based estimate.
+
+WORKOUTS — you MUST provide:
+- calories_burned: Use MET-based calculation (MET × weight_kg × hours). Assume 75kg if unknown. Running 8km/h = MET 8.0, HIIT = MET 8.0–10.0, strength training = MET 3.5–6.0, yoga = MET 2.5–4.0.
 
 Return ONLY valid JSON (no markdown). Always return an object with an "actions" array containing ALL extracted activities:
 
 {"actions": [
-  {"action": "create", "type": "meal", "name": "meal name", "calories": number, "protein": number, "carbs": number, "fats": number},
+  {"action": "create", "type": "meal", "name": "meal name", "meal_type": "breakfast|lunch|dinner|snack", "calories": number, "protein": number, "carbs": number, "fats": number, "fiber": number},
   {"action": "create", "type": "workout", "name": "workout name", "workout_type": "cardio|strength|flexibility|sports|hiit|other", "duration": number_in_minutes, "calories_burned": number},
-  {"action": "update", "type": "meal", "id": "existing-meal-id", "calories": number},
+  {"action": "update", "type": "meal", "id": "existing-meal-id", "calories": number, "fiber": number},
   {"action": "update", "type": "workout", "id": "existing-workout-id", "duration": number, "calories_burned": number}
 ]}
 
@@ -349,11 +361,13 @@ If nothing to extract: {"actions": []}`;
             protein: item.protein ?? null,
             carbs: item.carbs ?? null,
             fats: item.fats ?? null,
+            fiber: item.fiber ?? null,
             source: "ai_estimate",
             meal_time: new Date().toISOString(),
+            notes: item.meal_type ? `[${item.meal_type}]` : null,
           });
           if (error) console.error("Failed to insert meal:", error);
-          else console.log("Auto-logged meal:", item.name);
+          else console.log("Auto-logged meal:", item.name, "type:", item.meal_type);
         } else if (item.type === "workout") {
           const { error } = await supabase.from("workouts").insert({
             user_id: userId,

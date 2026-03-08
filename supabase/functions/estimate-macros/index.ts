@@ -32,7 +32,13 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are a nutrition estimation assistant. Given a meal description, estimate the nutritional content. Be reasonable with portion sizes. If the user doesn't specify amounts, assume a typical single serving.`,
+            content: `You are a precision nutrition estimation assistant using USDA FoodData Central reference values. Estimate macros accurately:
+- Use cooked/prepared weights unless raw is specified.
+- Realistic portions: a chicken breast = 150-180g cooked, a cup of rice = ~175g cooked.
+- Restaurant meals: default to higher-end estimates (oils and sauces add hidden calories).
+- Cross-check: protein×4 + carbs×4 + fats×9 must equal calories ±5%. Correct if needed.
+- Estimate fiber from whole food content. Return 0 only for purely refined/processed foods.
+- If quantities aren't specified, assume a typical single-serving portion for an adult.`,
           },
           {
             role: "user",
@@ -68,8 +74,12 @@ serve(async (req) => {
                     type: "number",
                     description: "Estimated fats in grams",
                   },
+                  fiber: {
+                    type: "number",
+                    description: "Estimated dietary fiber in grams",
+                  },
                 },
-                required: ["name", "calories", "protein", "carbs", "fats"],
+                required: ["name", "calories", "protein", "carbs", "fats", "fiber"],
                 additionalProperties: false,
               },
             },

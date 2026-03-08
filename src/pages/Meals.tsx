@@ -18,6 +18,7 @@ interface MacroEstimate {
   protein: number;
   carbs: number;
   fats: number;
+  fiber?: number;
 }
 
 interface Meal {
@@ -130,6 +131,7 @@ const Meals = () => {
         protein:  Math.round(estimate.protein),
         carbs:    Math.round(estimate.carbs),
         fats:     Math.round(estimate.fats),
+        fiber:    estimate.fiber != null ? Math.round(estimate.fiber) : null,
         notes:    `[${mealType}] ${description.trim()}`,
         source:   "ai_estimate",
       });

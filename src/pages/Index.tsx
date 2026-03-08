@@ -113,7 +113,7 @@ const Index = () => {
   const firstName = user?.user_metadata?.display_name?.split(" ")[0] || "there";
 
   const [totals, setTotals] = useState({
-    calories: 0, protein: 0, carbs: 0, fat: 0,
+    calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0,
     workoutMin: 0, caloriesBurned: 0,
   });
   const [targets, setTargets] = useState(DEFAULTS);
@@ -147,7 +147,7 @@ const Index = () => {
 
     Promise.all([
       supabase.from("meals")
-        .select("calories, protein, carbs, fats")
+        .select("calories, protein, carbs, fats, fiber")
         .eq("user_id", user.id)
         .gte("meal_time", todayStart.toISOString()),
       supabase.from("workouts")
@@ -164,6 +164,7 @@ const Index = () => {
         protein: meals.reduce((s, m) => s + (Number(m.protein) || 0), 0),
         carbs: meals.reduce((s, m) => s + (Number(m.carbs) || 0), 0),
         fat: meals.reduce((s, m) => s + (Number((m as any).fats) || 0), 0),
+        fiber: meals.reduce((s, m) => s + (Number((m as any).fiber) || 0), 0),
         workoutMin: workouts.reduce((s, w) => s + (w.duration || 0), 0),
         caloriesBurned: workouts.reduce((s, w) => s + (w.calories_burned || 0), 0),
       });
@@ -287,7 +288,7 @@ const Index = () => {
             format={(v) => `${v}g`}
           />
           <RadialRing
-            value={0}
+            value={loaded ? Math.round(totals.fiber) : 0}
             target={targets.fiber}
             colorToken="--metric-fiber"
             size={80} strokeWidth={6}
