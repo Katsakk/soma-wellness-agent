@@ -263,9 +263,9 @@ function matchFirst(body: string, re: RegExp): string | null {
 }
 
 function extractClassNameFromBody(body: string, subject: string): string | null {
-  // Look for explicit label
-  const labeled = extractLabeledField(body, "class(?:\\s*name)?");
-  if (labeled) return labeled;
+  // Require a colon to avoid matching "ClassPass" as a label
+  const m = body.match(/\bclass(?:\s*name)?\s*:\s*([^\n\r]{2,80})/i);
+  if (m) return m[1].trim();
   // From subject: "confirmed for X at Studio"
   const subj = subject.match(/(?:confirmed for|booked for|booking for)\s+(.+?)\s+(?:at|@)\s+/i);
   if (subj) return subj[1].trim();
