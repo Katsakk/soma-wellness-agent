@@ -86,7 +86,15 @@ export function useStravaIntegration() {
       const { data, error } = await supabase.functions.invoke("strava-sync", {
         body: { userId: user?.id },
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        let msg = "Strava sync failed";
+        if (error.context) {
+          try { const body = await error.context.json(); msg = body?.error || body?.message || msg; } catch {}
+        } else if (error.message && error.message !== "Edge Function returned a non-2xx status code") {
+          msg = error.message;
+        }
+        throw new Error(msg);
+      }
       const count = data?.imported ?? 0;
       toast.success(
         count > 0
