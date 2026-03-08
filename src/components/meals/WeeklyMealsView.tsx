@@ -4,11 +4,14 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Toolti
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 
 interface Meal {
+  id: string;
+  name: string;
   calories: number | null;
   protein: number | null;
   carbs: number | null;
   fats: number | null;
   meal_time: string;
+  notes: string | null;
 }
 
 interface WeeklyMealsViewProps {
@@ -39,6 +42,20 @@ const WeeklyMealsView = ({ meals }: WeeklyMealsViewProps) => {
   const avgCalories = Math.round(
     data.reduce((s, d) => s + d.calories, 0) / data.filter((d) => d.calories > 0).length || 0
   );
+
+  // Group meals by day — most recent first
+  const mealsByDay = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = subDays(new Date(), i);
+      const dayStart = startOfDay(date);
+      const dayEnd = endOfDay(date);
+      const dayMeals = meals.filter((m) => {
+        const t = new Date(m.meal_time);
+        return t >= dayStart && t <= dayEnd;
+      });
+      return { date, dayMeals };
+    }).filter((d) => d.dayMeals.length > 0);
+  }, [meals]);
 
   return (
     <div className="space-y-4">
@@ -108,8 +125,61 @@ const WeeklyMealsView = ({ meals }: WeeklyMealsViewProps) => {
           </div>
         </CardContent>
       </Card>
+
+      {/* ── History ───────────────────────────────────────────── */}
+      {mealsByDay.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest px-1">History</p>
+          {mealsByDay.map(({ date, dayMeals }) => (
+            <div key={date.toISOString()} className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground px-1">
+                {format(date, "EEEE, MMM d")}
+              </p>
+              {dayMeals.map((m) => (
+                <MealHistoryCard key={m.id} meal={m} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
+
+function MealHistoryCard({ meal: m }: { meal: Meal }) {
+  // Extract meal type label from notes field "[lunch] ..."
+  const typeMatch = m.notes?.match(/^\[(\w+)\]/);
+  const typeLabel = typeMatch
+    ? typeMatch[1].charAt(0).toUpperCase() + typeMatch[1].slice(1)
+    : null;
+
+  return (
+    <div className="surface-elevated p-4 flex items-center gap-3">
+      <div
+        className="w-2 h-2 rounded-full shrink-0 mt-0.5"
+        style={{ backgroundColor: "hsl(var(--metric-calories))" }}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="font-medium text-sm text-foreground truncate">{m.name}</p>
+          {typeLabel && (
+            <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground uppercase tracking-wide">
+              {typeLabel}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-muted-foreground">
+          <span style={{ color: "hsl(var(--metric-calories))" }}>{m.calories ?? 0} kcal</span>
+          <span>{m.protein ?? 0}g protein</span>
+          <span>{m.carbs ?? 0}g carbs</span>
+          <span>{m.fats ?? 0}g fat</span>
+        </div>
+      </div>
+      <span className="text-xs text-muted-foreground shrink-0">
+        {format(new Date(m.meal_time), "h:mm a")}
+      </span>
+    </div>
+  );
+}
 
 export default WeeklyMealsView;

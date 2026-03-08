@@ -48,10 +48,10 @@ const WeeklyActivityView = ({ workouts }: WeeklyActivityViewProps) => {
   const totalDuration = data.reduce((s, d) => s + d.duration, 0);
   const activeDays = data.filter((d) => d.count > 0).length;
 
-  // Group workouts by day for the history section
+  // Group workouts by day for the history section — most recent first
   const workoutsByDay = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => {
-      const date = subDays(new Date(), 6 - i);
+      const date = subDays(new Date(), i); // i=0 is today, i=6 is 6 days ago
       const dayStart = startOfDay(date);
       const dayEnd = endOfDay(date);
       const dayWorkouts = workouts.filter((w) => {
