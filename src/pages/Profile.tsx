@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import GoalsDialog, { type GoalsData } from "@/components/profile/GoalsDialog";
 import { useGmailIntegration } from "@/hooks/useGmailIntegration";
+import { useStravaIntegration } from "@/hooks/useStravaIntegration";
 
 const DIETARY_OPTIONS = ["Vegetarian", "Vegan", "Keto", "Paleo", "Gluten-Free", "Dairy-Free", "Low-Carb", "High-Protein"];
 const WORKOUT_OPTIONS = ["Running", "Cycling", "Swimming", "Yoga", "HIIT", "Strength Training", "Pilates", "CrossFit", "Boxing", "Walking"];
@@ -64,13 +65,18 @@ const Profile = () => {
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsOpen, setPrefsOpen]     = useState(false);
   const [connectedIntegrations, setConnectedIntegrations] = useState<Record<string, string>>({});
-  const gmail = useGmailIntegration();
+  const gmail  = useGmailIntegration();
+  const strava = useStravaIntegration();
 
-  // Handle OAuth popup callback
+  // Handle OAuth popup callbacks
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("gmail") === "connected" && window.opener) {
       window.opener.postMessage({ type: "gmail-connected" }, window.location.origin);
+      window.close();
+    }
+    if (params.get("strava") === "connected" && window.opener) {
+      window.opener.postMessage({ type: "strava-connected" }, window.location.origin);
       window.close();
     }
   }, []);
@@ -331,37 +337,49 @@ const Profile = () => {
         </div>
         <div className="grid grid-cols-3 gap-3">
           {[
-            { id: "gmail",  name: "Gmail",  logo: "/logos/gmail.svg"  },
-            { id: "strava", name: "Strava", logo: "/logos/strava.svg" },
-            { id: "oura",   name: "Oura",   logo: "/logos/oura.png"   },
-          ].map((int) => {
-            const isGmail = int.id === "gmail";
-            const isConnected = isGmail
-              ? gmail.status === "connected"
-              : connectedIntegrations[int.id] === "connected";
-            const handleClick = isGmail
-              ? () => gmail.connect("/profile")
-              : () => toast.info(`${int.name} integration coming soon!`);
-            return (
-              <button
-                key={int.id}
-                onClick={handleClick}
-                disabled={isGmail && gmail.status === "loading"}
-                className="relative flex flex-col items-center gap-2 rounded-xl bg-secondary border border-border p-4 hover:bg-secondary/70 transition-colors disabled:opacity-50"
-              >
-                <div className="rounded-xl bg-card p-2.5">
-                  <img src={int.logo} alt={int.name} className="h-5 w-5 object-contain" />
-                </div>
-                <span className="text-xs font-medium text-foreground/80">{int.name}</span>
-                <span className={`absolute top-2 right-2 inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${
-                  isConnected ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
-                }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${isConnected ? "bg-success" : "bg-muted-foreground/50"}`} />
-                  {isConnected ? "On" : "Off"}
-                </span>
-              </button>
-            );
-          })}
+            {
+              id: "gmail",
+              name: "Gmail",
+              logo: "/logos/gmail.svg",
+              isConnected: gmail.status === "connected",
+              isLoading: gmail.status === "loading",
+              onClick: () => gmail.status === "connected" ? gmail.disconnect() : gmail.connect("/profile"),
+            },
+            {
+              id: "strava",
+              name: "Strava",
+              logo: "/logos/strava.svg",
+              isConnected: strava.status === "connected",
+              isLoading: strava.status === "loading",
+              onClick: () => strava.status === "connected" ? strava.disconnect() : strava.connect("/profile"),
+            },
+            {
+              id: "oura",
+              name: "Oura",
+              logo: "/logos/oura.png",
+              isConnected: false,
+              isLoading: false,
+              onClick: () => toast.info("Oura integration coming soon!"),
+            },
+          ].map((int) => (
+            <button
+              key={int.id}
+              onClick={int.onClick}
+              disabled={int.isLoading}
+              className="relative flex flex-col items-center gap-2 rounded-xl bg-secondary border border-border p-4 hover:bg-secondary/70 transition-colors disabled:opacity-50"
+            >
+              <div className="rounded-xl bg-card p-2.5">
+                <img src={int.logo} alt={int.name} className="h-5 w-5 object-contain" />
+              </div>
+              <span className="text-xs font-medium text-foreground/80">{int.name}</span>
+              <span className={`absolute top-2 right-2 inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${
+                int.isConnected ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${int.isConnected ? "bg-success" : "bg-muted-foreground/50"}`} />
+                {int.isConnected ? "On" : "Off"}
+              </span>
+            </button>
+          ))}
         </div>
       </section>
 

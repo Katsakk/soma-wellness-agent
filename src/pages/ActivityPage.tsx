@@ -62,11 +62,15 @@ const ActivityPage = () => {
 
   useEffect(() => { fetchWorkouts(); }, [user]);
 
-  // Handle OAuth popup callback
+  // Handle OAuth popup callbacks
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("gmail") === "connected" && window.opener) {
       window.opener.postMessage({ type: "gmail-connected" }, window.location.origin);
+      window.close();
+    }
+    if (params.get("strava") === "connected" && window.opener) {
+      window.opener.postMessage({ type: "strava-connected" }, window.location.origin);
       window.close();
     }
   }, []);

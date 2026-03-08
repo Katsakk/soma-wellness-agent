@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, RefreshCw } from "lucide-react";
 import { useGmailIntegration } from "@/hooks/useGmailIntegration";
-import { toast } from "sonner";
+import { useStravaIntegration } from "@/hooks/useStravaIntegration";
 
 interface SyncWorkoutsDialogProps {
   open: boolean;
@@ -10,13 +10,22 @@ interface SyncWorkoutsDialogProps {
 }
 
 const SyncWorkoutsDialog = ({ open, onOpenChange, onSynced }: SyncWorkoutsDialogProps) => {
-  const gmail = useGmailIntegration();
+  const gmail  = useGmailIntegration();
+  const strava = useStravaIntegration();
 
   const handleGmailClick = () => {
     if (gmail.status === "disconnected") {
       gmail.connect("/activity");
     } else if (gmail.status === "connected") {
       gmail.sync(() => { onSynced?.(); onOpenChange(false); });
+    }
+  };
+
+  const handleStravaClick = () => {
+    if (strava.status === "disconnected") {
+      strava.connect("/activity");
+    } else if (strava.status === "connected") {
+      strava.sync(() => { onSynced?.(); onOpenChange(false); });
     }
   };
 
@@ -30,70 +39,92 @@ const SyncWorkoutsDialog = ({ open, onOpenChange, onSynced }: SyncWorkoutsDialog
           Connect a service to automatically import your workouts.
         </p>
         <div className="space-y-2 pt-2">
-          {/* Gmail */}
-          <button
-            onClick={handleGmailClick}
-            disabled={gmail.status === "loading" || gmail.syncing}
-            className="w-full flex items-center gap-3 rounded-xl border bg-card p-3 hover:bg-muted transition-colors disabled:opacity-50"
-          >
-            <div className="rounded-lg bg-muted p-2 shrink-0">
-              <img src="/logos/gmail.svg" alt="Gmail" className="h-5 w-5 object-contain" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-sm font-medium">Gmail</p>
-              <p className="text-xs text-muted-foreground">
-                {gmail.status === "loading" && "Checking…"}
-                {gmail.status === "disconnected" && "Scan booking confirmation emails"}
-                {gmail.status === "connected" && (gmail.lastSyncAt
-                  ? `Last synced ${new Date(gmail.lastSyncAt).toLocaleDateString()}`
-                  : "Ready to sync")}
-              </p>
-            </div>
-            <div className="shrink-0">
-              {gmail.status === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-              {gmail.status === "disconnected" && <span className="text-xs font-medium text-primary">Connect</span>}
-              {gmail.status === "connected" && !gmail.syncing && (
-                <span className="flex items-center gap-1 text-xs font-medium text-primary">
-                  <RefreshCw className="h-3.5 w-3.5" /> Sync
-                </span>
-              )}
-              {gmail.syncing && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-            </div>
-          </button>
 
           {/* Strava */}
-          <button
-            onClick={() => toast.info("Strava integration coming soon!")}
-            className="w-full flex items-center gap-3 rounded-xl border bg-card p-3 hover:bg-muted transition-colors opacity-60"
-          >
-            <div className="rounded-lg bg-muted p-2 shrink-0">
-              <img src="/logos/strava.svg" alt="Strava" className="h-5 w-5 object-contain" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-sm font-medium">Strava</p>
-              <p className="text-xs text-muted-foreground">Import runs & rides</p>
-            </div>
-            <span className="text-xs text-muted-foreground shrink-0">Soon</span>
-          </button>
+          <IntegrationRow
+            logo="/logos/strava.svg"
+            name="Strava"
+            status={strava.status}
+            syncing={strava.syncing}
+            lastSyncAt={strava.lastSyncAt}
+            subtitle="Import runs, rides & all activities"
+            onClick={handleStravaClick}
+          />
+
+          {/* Gmail */}
+          <IntegrationRow
+            logo="/logos/gmail.svg"
+            name="Gmail"
+            status={gmail.status}
+            syncing={gmail.syncing}
+            lastSyncAt={gmail.lastSyncAt}
+            subtitle="Scan booking confirmation emails"
+            onClick={handleGmailClick}
+          />
 
           {/* Oura */}
-          <button
-            onClick={() => toast.info("Oura integration coming soon!")}
-            className="w-full flex items-center gap-3 rounded-xl border bg-card p-3 hover:bg-muted transition-colors opacity-60"
-          >
-            <div className="rounded-lg bg-muted p-2 shrink-0">
-              <img src="/logos/oura.png" alt="Oura" className="h-5 w-5 object-contain" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-sm font-medium">Oura</p>
-              <p className="text-xs text-muted-foreground">Sync ring activity</p>
-            </div>
-            <span className="text-xs text-muted-foreground shrink-0">Soon</span>
-          </button>
+          <IntegrationRow
+            logo="/logos/oura.png"
+            name="Oura"
+            status="soon"
+            subtitle="Sync ring activity data"
+          />
         </div>
       </DialogContent>
     </Dialog>
   );
 };
+
+type IntegrationStatus = "loading" | "connected" | "disconnected" | "soon";
+
+function IntegrationRow({
+  logo, name, status, syncing, lastSyncAt, subtitle, onClick,
+}: {
+  logo: string; name: string; status: IntegrationStatus;
+  syncing?: boolean; lastSyncAt?: string | null;
+  subtitle: string; onClick?: () => void;
+}) {
+  const isSoon = status === "soon";
+  const isLoading = status === "loading";
+  const isConnected = status === "connected";
+
+  const subtext = isLoading ? "Checking\u2026"
+    : isSoon ? subtitle
+    : !isConnected ? subtitle
+    : lastSyncAt
+      ? `Last synced ${new Date(lastSyncAt).toLocaleDateString()}`
+      : "Ready to sync";
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={isSoon || isLoading || syncing}
+      className={`w-full flex items-center gap-3 rounded-xl border bg-card p-3 transition-colors disabled:cursor-default ${
+        isSoon ? "opacity-50" : "hover:bg-secondary"
+      }`}
+    >
+      <div className="rounded-lg bg-secondary p-2 shrink-0">
+        <img src={logo} alt={name} className="h-5 w-5 object-contain" />
+      </div>
+      <div className="flex-1 text-left min-w-0">
+        <p className="text-sm font-medium">{name}</p>
+        <p className="text-xs text-muted-foreground truncate">{subtext}</p>
+      </div>
+      <div className="shrink-0">
+        {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+        {syncing  && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+        {isSoon   && <span className="text-xs text-muted-foreground">Soon</span>}
+        {!isSoon && !isLoading && !syncing && !isConnected && (
+          <span className="text-xs font-medium text-primary">Connect</span>
+        )}
+        {!isSoon && !isLoading && !syncing && isConnected && (
+          <span className="flex items-center gap-1 text-xs font-medium text-primary">
+            <RefreshCw className="h-3.5 w-3.5" /> Sync
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
 
 export default SyncWorkoutsDialog;
