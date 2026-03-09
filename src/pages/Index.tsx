@@ -144,6 +144,8 @@ const Index = () => {
     if (!user) return;
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
 
     Promise.all([
       supabase.from("meals")
@@ -153,7 +155,8 @@ const Index = () => {
       supabase.from("workouts")
         .select("duration, calories_burned")
         .eq("user_id", user.id)
-        .gte("created_at", todayStart.toISOString()),
+        .gte("completed_at", todayStart.toISOString())
+        .lte("completed_at", todayEnd.toISOString()),
       supabase.from("goals")
         .select("*").eq("user_id", user.id).eq("is_active", true).limit(1),
     ]).then(([mealsRes, workoutsRes, goalsRes]) => {
@@ -233,29 +236,7 @@ const Index = () => {
         </div>
       </div>
 
-      {/* ── 3. AI Chat ──────────────────────────────────────────── */}
-      <div ref={chatSectionRef}>
-        <ConversationList
-          conversations={conversations}
-          activeId={activeId}
-          onSelect={setActiveId}
-          onCreate={() => createConversation()}
-          onDelete={deleteConversation}
-          onRename={renameConversation}
-        />
-        {activeId && (
-          <div className="mt-3">
-            <ChatInterface
-              conversationId={activeId}
-              onFirstMessage={(text) => renameConversation(activeId, text.slice(0, 40))}
-              autoSend={pendingAutoSend}
-              onAutoSendComplete={() => setPendingAutoSend(null)}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* ── 4. Nutrition monitor ────────────────────────────────── */}
+      {/* ── 3. Nutrition monitor ────────────────────────────────── */}
       <div className="surface-elevated p-5 space-y-6">
         <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
           Today's Nutrition
@@ -397,6 +378,28 @@ const Index = () => {
             onClick={() => sendToChat("Based on my past workouts, goals and meals, recommend 3 activity ideas — including workout type, workout time and reason for this recommendation")}
           />
         </div>
+      </div>
+
+      {/* ── 7. AI Chat ──────────────────────────────────────────── */}
+      <div ref={chatSectionRef}>
+        <ConversationList
+          conversations={conversations}
+          activeId={activeId}
+          onSelect={setActiveId}
+          onCreate={() => createConversation()}
+          onDelete={deleteConversation}
+          onRename={renameConversation}
+        />
+        {activeId && (
+          <div className="mt-3">
+            <ChatInterface
+              conversationId={activeId}
+              onFirstMessage={(text) => renameConversation(activeId, text.slice(0, 40))}
+              autoSend={pendingAutoSend}
+              onAutoSendComplete={() => setPendingAutoSend(null)}
+            />
+          </div>
+        )}
       </div>
 
     </div>
