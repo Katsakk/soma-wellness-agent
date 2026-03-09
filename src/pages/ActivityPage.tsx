@@ -96,7 +96,7 @@ const ActivityPage = () => {
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(todayStart);
     todayEnd.setHours(23, 59, 59, 999);
-    const monthStart = subDays(new Date(), 30);
+    const historyStart = subDays(new Date(), 90);
 
     const [todayRes, allRes] = await Promise.all([
       // Today: strict window so past-dated synced workouts don't bleed in
@@ -104,9 +104,9 @@ const ActivityPage = () => {
         .gte("completed_at", todayStart.toISOString())
         .lte("completed_at", todayEnd.toISOString())
         .order("completed_at", { ascending: false }),
-      // Monthly/weekly: filter by completed_at so past synced workouts appear on their actual day
+      // Weekly/monthly: 90 days back + all future (no upper bound) so upcoming Gmail bookings show
       supabase.from("workouts").select("*").eq("user_id", user.id)
-        .gte("completed_at", monthStart.toISOString()).order("completed_at", { ascending: false }),
+        .gte("completed_at", historyStart.toISOString()).order("completed_at", { ascending: false }),
     ]);
 
     setTodayWorkouts(todayRes.data || []);

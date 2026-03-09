@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from "recharts";
 import { Clock, Flame, Dumbbell } from "lucide-react";
-import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { format, subDays, addDays, startOfDay, endOfDay } from "date-fns";
 
 interface Workout {
   id: string;
@@ -48,7 +48,29 @@ const WeeklyActivityView = ({ workouts }: WeeklyActivityViewProps) => {
   const totalDuration = data.reduce((s, d) => s + d.duration, 0);
   const activeDays = data.filter((d) => d.count > 0).length;
 
-  // Group workouts by day for the history section — most recent first
+  const todayEnd = endOfDay(new Date());
+
+  // Upcoming bookings: future classes (e.g. Gmail confirmations for next week)
+  const upcomingByDay = useMemo(() => {
+    // Collect all distinct future dates from workouts
+    const futureDates = new Map<string, typeof workouts>();
+    for (const w of workouts) {
+      const t = new Date(w.completed_at || w.created_at);
+      if (t > todayEnd) {
+        const key = format(t, "yyyy-MM-dd");
+        if (!futureDates.has(key)) futureDates.set(key, []);
+        futureDates.get(key)!.push(w);
+      }
+    }
+    return Array.from(futureDates.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, dayWorkouts]) => ({
+        date: new Date(dayWorkouts[0].completed_at || dayWorkouts[0].created_at),
+        dayWorkouts,
+      }));
+  }, [workouts]);
+
+  // Group past workouts by day for the history section — most recent first
   const workoutsByDay = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => {
       const date = subDays(new Date(), i); // i=0 is today, i=6 is 6 days ago
@@ -109,6 +131,23 @@ const WeeklyActivityView = ({ workouts }: WeeklyActivityViewProps) => {
         </CardContent>
       </Card>
 
+      {/* ── Upcoming bookings ─────────────────────────────────── */}
+      {upcomingByDay.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest px-1">Upcoming</p>
+          {upcomingByDay.map(({ date, dayWorkouts }) => (
+            <div key={date.toISOString()} className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground px-1">
+                {format(date, "EEEE, MMM d")}
+              </p>
+              {dayWorkouts.map((w) => (
+                <WorkoutHistoryCard key={w.id} workout={w} upcoming />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ── History ───────────────────────────────────────────── */}
       {workoutsByDay.length > 0 && (
         <div className="space-y-3">
@@ -129,10 +168,10 @@ const WeeklyActivityView = ({ workouts }: WeeklyActivityViewProps) => {
   );
 };
 
-function WorkoutHistoryCard({ workout: w }: { workout: Workout }) {
+function WorkoutHistoryCard({ workout: w, upcoming = false }: { workout: Workout; upcoming?: boolean }) {
   const typeLabel = TYPE_LABELS[w.workout_type || "other"] ?? TYPE_LABELS.other;
   return (
-    <div className="surface-elevated p-4 flex items-center gap-3">
+    <div className={`surface-elevated p-4 flex items-center gap-3 ${upcoming ? "opacity-70" : ""}`}>
       <div
         className="flex items-center justify-center w-9 h-9 rounded-xl shrink-0"
         style={{ backgroundColor: "hsl(var(--metric-activity) / 0.12)" }}
@@ -142,6 +181,9 @@ function WorkoutHistoryCard({ workout: w }: { workout: Workout }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="font-medium text-sm text-foreground truncate">{w.name}</p>
+          {upcoming && (
+            <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground uppercase tracking-wide">Booked</span>
+          )}
           {w.source === "strava" && (
             <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-500/15 text-orange-400 uppercase tracking-wide">Strava</span>
           )}
@@ -154,7 +196,7 @@ function WorkoutHistoryCard({ workout: w }: { workout: Workout }) {
           {w.duration && (
             <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {w.duration} min</span>
           )}
-          {w.calories_burned ? (
+          {!upcoming && w.calories_burned ? (
             <span className="flex items-center gap-1" style={{ color: "hsl(var(--metric-activity))" }}>
               <Flame className="h-3 w-3" /> {w.calories_burned} kcal
             </span>
