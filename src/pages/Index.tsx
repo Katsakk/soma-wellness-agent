@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Sparkles, Utensils, Dumbbell, Lightbulb, Trophy } from "lucide-react";
+import { Sparkles, Utensils, Dumbbell, Lightbulb } from "lucide-react";
 import { format } from "date-fns";
 import ConversationList from "@/components/chat/ConversationList";
 import ChatInterface from "@/components/ChatInterface";
@@ -357,13 +357,6 @@ const Index = () => {
             onClick={() => navigate("/meals")}
           />
           <ActionTile
-            icon={Lightbulb}
-            title="Meal ideas"
-            subtitle="Nearby restaurants for your goals"
-            colorToken="--metric-fiber"
-            onClick={() => navigate("/ideas?section=meals")}
-          />
-          <ActionTile
             icon={Dumbbell}
             title="Log activity"
             subtitle="Record your workout"
@@ -371,11 +364,11 @@ const Index = () => {
             onClick={() => navigate("/activity")}
           />
           <ActionTile
-            icon={Trophy}
-            title="Workout ideas"
-            subtitle="Nearby gyms and studios"
-            colorToken="--metric-protein"
-            onClick={() => navigate("/ideas?section=activity")}
+            icon={Lightbulb}
+            title="Ideas"
+            subtitle="Nearby restaurants & studios for your goals"
+            colorToken="--metric-fiber"
+            onClick={() => navigate("/ideas")}
           />
         </div>
       </div>
