@@ -199,18 +199,31 @@ serve(async (req) => {
       imported = toInsert.length;
     }
 
-    // Backfill calories for existing Strava workouts that have none
-    const existingNullCals = activities.filter((a: any) => existingIds.has(`strava_${a.id}`));
-    for (const a of existingNullCals) {
-      const estimated = a.calories || estimateCaloriesFromActivity(a);
-      if (estimated) {
-        await supabase.from("workouts")
-          .update({ calories_burned: estimated })
-          .eq("user_id", userId)
-          .eq("source", "strava")
-          .eq("notes", `strava_${a.id}`)
-          .is("calories_burned", null);
+    // Backfill ALL existing Strava workouts that are missing calories
+    // (uses stored workout_type + duration so no Strava API re-fetch needed)
+    const MET_BY_TYPE: Record<string, number> = {
+      cardio: 8.5, strength: 5.0, hiit: 10.0, flexibility: 3.0,
+      full_body: 6.5, upper_body: 5.5, lower_body: 5.5, sports: 7.5, other: 5.5,
+    };
+    const { data: nullCalWorkouts } = await supabase
+      .from("workouts")
+      .select("id, workout_type, duration")
+      .eq("user_id", userId)
+      .eq("source", "strava")
+      .is("calories_burned", null);
+
+    if (nullCalWorkouts && nullCalWorkouts.length > 0) {
+      for (const w of nullCalWorkouts) {
+        const met = MET_BY_TYPE[w.workout_type || "other"] ?? MET_BY_TYPE.other;
+        const durationHours = (w.duration || 0) / 60;
+        const estimated = Math.round(met * 70 * durationHours);
+        if (estimated > 0) {
+          await supabase.from("workouts")
+            .update({ calories_burned: estimated })
+            .eq("id", w.id);
+        }
       }
+      console.log(`Backfilled calories for ${nullCalWorkouts.length} existing Strava workouts`);
     }
 
     await supabase.from("integrations")
