@@ -21,6 +21,29 @@ function mapStravaType(sportType: string): string {
   return "other";
 }
 
+// MET values by Strava sport_type (metabolic equivalent of task)
+// Calories = MET × 70kg × (duration_hours)
+const SPORT_MET: Record<string, number> = {
+  run: 9.8, trailrun: 10.5, virtualrun: 9.0,
+  ride: 7.5, gravelride: 8.5, ebikeride: 5.0, virtualride: 6.5, handcycle: 5.5,
+  swim: 7.0,
+  walk: 3.8, hike: 5.3,
+  weighttraining: 5.0,
+  yoga: 3.0, pilates: 3.5, stretching: 2.5,
+  hiit: 10.0, crossfit: 8.5, workout: 6.0,
+  soccer: 8.0, tennis: 7.3, basketball: 8.0, football: 8.0,
+  boxing: 9.0, skiing: 6.8, snowboarding: 6.0, rowing: 7.0,
+  other: 5.5,
+};
+
+function estimateCaloriesFromActivity(a: any): number {
+  const sportKey = (a.sport_type || a.type || "other").toLowerCase();
+  const met = SPORT_MET[sportKey] ?? SPORT_MET.other;
+  const durationHours = (a.moving_time || 0) / 3600;
+  const weightKg = 70; // default body weight
+  return Math.round(met * weightKg * durationHours);
+}
+
 // Refresh a Strava access token using the refresh token
 async function refreshStravaToken(refreshToken: string): Promise<{ access_token: string; refresh_token: string; expires_at: number } | null> {
   const res = await fetch("https://www.strava.com/oauth/token", {
@@ -148,7 +171,7 @@ serve(async (req) => {
         name: a.name || a.sport_type || "Strava Workout",
         workout_type: mapStravaType(a.sport_type || a.type || ""),
         duration: a.moving_time ? Math.round(a.moving_time / 60) : null, // seconds → minutes
-        calories_burned: a.calories || null,
+        calories_burned: a.calories || estimateCaloriesFromActivity(a) || null,
         source: "strava",
         notes: `strava_${a.id}`,
         completed_at: a.start_date || new Date().toISOString(),
@@ -174,6 +197,20 @@ serve(async (req) => {
         throw new Error(`Failed to insert workouts: ${insertError.message}`);
       }
       imported = toInsert.length;
+    }
+
+    // Backfill calories for existing Strava workouts that have none
+    const existingNullCals = activities.filter((a: any) => existingIds.has(`strava_${a.id}`));
+    for (const a of existingNullCals) {
+      const estimated = a.calories || estimateCaloriesFromActivity(a);
+      if (estimated) {
+        await supabase.from("workouts")
+          .update({ calories_burned: estimated })
+          .eq("user_id", userId)
+          .eq("source", "strava")
+          .eq("notes", `strava_${a.id}`)
+          .is("calories_burned", null);
+      }
     }
 
     await supabase.from("integrations")
