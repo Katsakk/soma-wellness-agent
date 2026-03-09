@@ -278,9 +278,11 @@ const IdeasPage = () => {
 
   // ── Google Maps init ───────────────────────────────────────────────────────
 
-  const initMap = useCallback((coords: { lat: number; lng: number }) => {
+  const initMap = useCallback(async (coords: { lat: number; lng: number }) => {
     if (!mapRef.current || !window.google || mapInstanceRef.current) return;
-    mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { Map } = await (window.google.maps as any).importLibrary("maps");
+    mapInstanceRef.current = new Map(mapRef.current, {
       center: coords,
       zoom: 15,
       styles: DARK_MAP_STYLES,
@@ -297,16 +299,16 @@ const IdeasPage = () => {
     const existing = document.querySelector('script[src*="maps.googleapis.com"]');
     if (existing) return;
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&loading=async&libraries=places&v=beta`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&loading=async&v=beta`;
     script.async = true;
     document.head.appendChild(script);
   }, []);
 
   useEffect(() => {
     if (!location) return;
-    const try_ = () => {
+    const try_ = async () => {
       if (window.google) {
-        initMap(location);
+        await initMap(location);
         mapsReadyRef.current = true;
         fetchPlaces(location, section, distanceFilter);
       } else {
@@ -363,8 +365,8 @@ const IdeasPage = () => {
 
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const PlaceClass = (window.google.maps.places as any).Place;
-        const { places: results } = await PlaceClass.searchNearby({
+        const { Place } = await (window.google.maps as any).importLibrary("places");
+        const { places: results } = await Place.searchNearby({
           fields: ["id", "displayName", "location", "types", "formattedAddress",
                    "rating", "userRatingCount", "priceLevel"],
           locationRestriction: {
