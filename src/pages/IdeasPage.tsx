@@ -297,7 +297,7 @@ const IdeasPage = () => {
     const existing = document.querySelector('script[src*="maps.googleapis.com"]');
     if (existing) return;
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&loading=async&libraries=places&v=beta`;
     script.async = true;
     document.head.appendChild(script);
   }, []);
@@ -342,66 +342,70 @@ const IdeasPage = () => {
     }
   }, [location]);
 
-  // ── Places API ─────────────────────────────────────────────────────────────
+  // ── Places API (New) ───────────────────────────────────────────────────────
+
+  // Maps the new PriceLevel enum string to a 0–4 integer
+  const PRICE_LEVEL_MAP: Record<string, number> = {
+    PRICE_LEVEL_FREE: 0,
+    PRICE_LEVEL_INEXPENSIVE: 1,
+    PRICE_LEVEL_MODERATE: 2,
+    PRICE_LEVEL_EXPENSIVE: 3,
+    PRICE_LEVEL_VERY_EXPENSIVE: 4,
+  };
 
   const fetchPlaces = useCallback(
-    (coords: { lat: number; lng: number }, sec: Section, radius: DistanceFilter) => {
+    async (coords: { lat: number; lng: number }, sec: Section, radius: DistanceFilter) => {
       if (!window.google) return;
       setPlacesLoading(true);
       setPlacesError(null);
       setPlaces([]);
       resetFilters();
 
-      const dummy = mapInstanceRef.current || (() => {
-        const div = document.createElement("div");
-        return new window.google.maps.Map(div, { center: coords, zoom: 15 });
-      })();
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const PlaceClass = (window.google.maps.places as any).Place;
+        const { places: results } = await PlaceClass.searchNearby({
+          fields: ["id", "displayName", "location", "types", "formattedAddress",
+                   "rating", "userRatingCount", "priceLevel"],
+          locationRestriction: {
+            circle: { center: { lat: coords.lat, lng: coords.lng }, radius: parseInt(radius) },
+          },
+          includedTypes: [sec === "meals" ? "restaurant" : "gym"],
+          maxResultCount: 12,
+        });
 
-      const service = new window.google.maps.places.PlacesService(dummy);
-      const request: google.maps.places.PlaceSearchRequest = {
-        location: new window.google.maps.LatLng(coords.lat, coords.lng),
-        radius: parseInt(radius),
-        type: sec === "meals" ? "restaurant" : "gym",
-        rankBy: undefined,
-      };
-
-      service.nearbySearch(request, (results, status) => {
-        if (
-          status === window.google.maps.places.PlacesServiceStatus.OK && results
-        ) {
-          const mapped: Place[] = results.slice(0, 12).map((r) => ({
-            place_id: r.place_id!,
-            name: r.name!,
-            vicinity: r.vicinity || "",
-            rating: r.rating,
-            user_ratings_total: (r as any).user_ratings_total,
-            types: r.types || [],
-            price_level: (r as any).price_level,
-            geometry: {
-              location: {
-                lat: r.geometry!.location!.lat(),
-                lng: r.geometry!.location!.lng(),
-              },
-            },
-            distance: haversineMetres(
-              coords.lat, coords.lng,
-              r.geometry!.location!.lat(), r.geometry!.location!.lng()
-            ),
-          })).sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
-
-          setPlaces(mapped);
-          updateMarkers(mapped);
-          fetchInsight(mapped, sec);
-        } else if (
-          status === window.google.maps.places.PlacesServiceStatus.ZERO_RESULTS
-        ) {
+        if (!results || results.length === 0) {
           setPlaces([]);
           setPlacesLoading(false);
-        } else {
-          setPlacesError("Could not fetch nearby places. Please retry.");
-          setPlacesLoading(false);
+          return;
         }
-      });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mapped: Place[] = results.map((r: any) => ({
+          place_id: r.id,
+          name: r.displayName,
+          vicinity: r.formattedAddress || "",
+          rating: r.rating,
+          user_ratings_total: r.userRatingCount,
+          types: r.types || [],
+          price_level: r.priceLevel ? PRICE_LEVEL_MAP[r.priceLevel] : undefined,
+          geometry: {
+            location: {
+              lat: r.location.lat(),
+              lng: r.location.lng(),
+            },
+          },
+          distance: haversineMetres(coords.lat, coords.lng, r.location.lat(), r.location.lng()),
+        })).sort((a: Place, b: Place) => (a.distance ?? 0) - (b.distance ?? 0));
+
+        setPlaces(mapped);
+        updateMarkers(mapped);
+        fetchInsight(mapped, sec);
+      } catch (err) {
+        console.error("Places error:", err);
+        setPlacesError("Could not fetch nearby places. Please retry.");
+        setPlacesLoading(false);
+      }
     },
     [updateMarkers]
   );
