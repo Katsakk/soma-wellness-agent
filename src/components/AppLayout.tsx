@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Utensils, Dumbbell, User } from "lucide-react";
+import { LayoutDashboard, Utensils, Dumbbell, Lightbulb, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import somaLogo from "@/assets/soma-logo.png";
 
@@ -7,6 +7,7 @@ const navItems = [
   { to: "/",         icon: LayoutDashboard, label: "Dashboard" },
   { to: "/meals",    icon: Utensils,        label: "Food" },
   { to: "/activity", icon: Dumbbell,        label: "Activity" },
+  { to: "/ideas",    icon: Lightbulb,       label: "Ideas" },
   { to: "/profile",  icon: User,            label: "Profile" },
 ];
 

@@ -359,9 +359,9 @@ const Index = () => {
           <ActionTile
             icon={Lightbulb}
             title="Meal ideas"
-            subtitle="AI-powered suggestions"
+            subtitle="Nearby restaurants for your goals"
             colorToken="--metric-fiber"
-            onClick={() => sendToChat("Given my logged meals and activity for today, what should be my next meal?")}
+            onClick={() => navigate("/ideas?section=meals")}
           />
           <ActionTile
             icon={Dumbbell}
@@ -373,9 +373,9 @@ const Index = () => {
           <ActionTile
             icon={Trophy}
             title="Workout ideas"
-            subtitle="Personalized plans"
+            subtitle="Nearby gyms and studios"
             colorToken="--metric-protein"
-            onClick={() => sendToChat("Based on my past workouts, goals and meals, recommend 3 activity ideas — including workout type, workout time and reason for this recommendation")}
+            onClick={() => navigate("/ideas?section=activity")}
           />
         </div>
       </div>
