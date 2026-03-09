@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +11,9 @@ import {
 
 type Section = "meals" | "activity";
 type DistanceFilter = "1000" | "3000" | "5000";
+type GoalFilter = "all" | "high-protein" | "low-calorie" | "balanced";
+type VenueTypeFilter = "all" | "gym" | "yoga" | "pilates" | "crossfit" | "other";
+type IntensityFilter = "all" | "low" | "moderate" | "high";
 
 interface Place {
   place_id: string;
@@ -89,9 +92,87 @@ function haversineMetres(lat1: number, lon1: number, lat2: number, lon2: number)
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-function priceDots(level?: number): string {
-  if (!level) return "";
-  return "·".repeat(level) + "○".repeat(Math.max(0, 4 - level));
+// ── Filter helpers ────────────────────────────────────────────────────────────
+
+function matchesGoalFilter(place: Place, filter: GoalFilter): boolean {
+  if (filter === "all") return true;
+  const types = place.types;
+  const name = place.name.toLowerCase();
+  if (filter === "high-protein") {
+    // Prefer restaurants (protein-heavy cuisines) over snack/bakery/cafe
+    const proteinTypes = ["restaurant", "japanese_restaurant", "indian_restaurant",
+      "american_restaurant", "mediterranean_restaurant", "seafood_restaurant",
+      "korean_restaurant", "mexican_restaurant", "steak_house", "meal_delivery",
+      "meal_takeaway"];
+    return types.some((t) => proteinTypes.includes(t));
+  }
+  if (filter === "low-calorie") {
+    const lightTypes = ["vegetarian_restaurant", "vegan_restaurant", "sushi",
+      "japanese_restaurant", "thai_restaurant", "vietnamese_restaurant"];
+    const lightKeywords = ["salad", "sushi", "health", "vegan", "veggie", "poke",
+      "bowl", "wrap", "fresh", "light", "green", "organic"];
+    return (
+      types.some((t) => lightTypes.includes(t)) ||
+      lightKeywords.some((k) => name.includes(k))
+    );
+  }
+  // balanced — everything qualifies
+  return true;
+}
+
+function matchesVenueType(place: Place, filter: VenueTypeFilter): boolean {
+  if (filter === "all") return true;
+  const types = place.types;
+  const name = place.name.toLowerCase();
+  if (filter === "gym") return types.includes("gym") || types.includes("fitness_center") || types.includes("health");
+  if (filter === "yoga") return types.includes("yoga_studio") || name.includes("yoga");
+  if (filter === "pilates") return name.includes("pilates");
+  if (filter === "crossfit") return name.includes("crossfit") || name.includes("cross fit");
+  if (filter === "other") {
+    return (
+      !types.includes("gym") && !types.includes("fitness_center") && !types.includes("health") &&
+      !types.includes("yoga_studio") && !name.includes("yoga") &&
+      !name.includes("pilates") && !name.includes("crossfit")
+    );
+  }
+  return true;
+}
+
+function matchesIntensity(place: Place, filter: IntensityFilter): boolean {
+  if (filter === "all") return true;
+  const types = place.types;
+  const name = place.name.toLowerCase();
+  if (filter === "low") {
+    const lowTypes = ["yoga_studio", "spa", "swimming_pool"];
+    const lowKw = ["yoga", "pilates", "swim", "stretch", "meditation", "wellness", "spa"];
+    return types.some((t) => lowTypes.includes(t)) || lowKw.some((k) => name.includes(k));
+  }
+  if (filter === "high") {
+    const highKw = ["crossfit", "cross fit", "hiit", "boxing", "martial arts",
+      "karate", "judo", "muay thai", "kickboxing", "f45", "orangetheory"];
+    return highKw.some((k) => name.includes(k));
+  }
+  // moderate = everything else (gym, fitness centre, sports complex, etc.)
+  return true;
+}
+
+// ── Filter pill component ─────────────────────────────────────────────────────
+
+function FilterPill({
+  label, active, onClick,
+}: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+        active
+          ? "bg-primary/15 border-primary/40 text-primary"
+          : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+      }`}
+    >
+      {label}
+    </button>
+  );
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────────
@@ -112,6 +193,14 @@ const IdeasPage = () => {
 
   const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>("1000");
 
+  // Meals filters
+  const [cuisineFilter, setCuisineFilter] = useState<string>("all");
+  const [goalFilter, setGoalFilter] = useState<GoalFilter>("all");
+
+  // Activity filters
+  const [venueTypeFilter, setVenueTypeFilter] = useState<VenueTypeFilter>("all");
+  const [intensityFilter, setIntensityFilter] = useState<IntensityFilter>("all");
+
   const [insightText, setInsightText] = useState("");
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [insightLoading, setInsightLoading] = useState(false);
@@ -121,7 +210,44 @@ const IdeasPage = () => {
   const markersRef = useRef<google.maps.Marker[]>([]);
   const mapsReadyRef = useRef(false);
 
+  // ── Derived: available cuisine types from current results ─────────────────
+
+  const availableCuisines = useMemo(() => {
+    const labels = new Set<string>();
+    for (const p of places) {
+      const label = getTypeLabel(p.types, "meals");
+      labels.add(label);
+    }
+    return Array.from(labels).sort();
+  }, [places]);
+
+  // ── Derived: filtered places ───────────────────────────────────────────────
+
+  const filteredPlaces = useMemo(() => {
+    if (section === "meals") {
+      return places.filter((p) => {
+        if (cuisineFilter !== "all") {
+          const label = getTypeLabel(p.types, "meals");
+          if (label !== cuisineFilter) return false;
+        }
+        return matchesGoalFilter(p, goalFilter);
+      });
+    } else {
+      return places.filter((p) => {
+        if (!matchesVenueType(p, venueTypeFilter)) return false;
+        return matchesIntensity(p, intensityFilter);
+      });
+    }
+  }, [places, section, cuisineFilter, goalFilter, venueTypeFilter, intensityFilter]);
+
   // ── Section switch ─────────────────────────────────────────────────────────
+
+  const resetFilters = () => {
+    setCuisineFilter("all");
+    setGoalFilter("all");
+    setVenueTypeFilter("all");
+    setIntensityFilter("all");
+  };
 
   const switchSection = (s: Section) => {
     setSection(s);
@@ -129,6 +255,7 @@ const IdeasPage = () => {
     setPlaces([]);
     setInsightText("");
     setExplanations({});
+    resetFilters();
     if (location && mapsReadyRef.current) fetchPlaces(location, s, distanceFilter);
   };
 
@@ -210,7 +337,6 @@ const IdeasPage = () => {
       });
       return marker;
     });
-    // Pan to user's location
     if (results.length > 0 && location) {
       mapInstanceRef.current!.setCenter(new window.google.maps.LatLng(location.lat, location.lng));
     }
@@ -224,6 +350,7 @@ const IdeasPage = () => {
       setPlacesLoading(true);
       setPlacesError(null);
       setPlaces([]);
+      resetFilters();
 
       const dummy = mapInstanceRef.current || (() => {
         const div = document.createElement("div");
@@ -310,6 +437,8 @@ const IdeasPage = () => {
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  const distanceLabel = distanceFilter === "1000" ? "1 km" : distanceFilter === "3000" ? "3 km" : "5 km";
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8 space-y-5 pb-32">
@@ -405,8 +534,10 @@ const IdeasPage = () => {
           <div className="flex items-center gap-2">
             <div className="flex gap-1">
               {(["1000", "3000", "5000"] as DistanceFilter[]).map((d) => (
-                <button
+                <FilterPill
                   key={d}
+                  label={d === "1000" ? "1 km" : d === "3000" ? "3 km" : "5 km"}
+                  active={distanceFilter === d}
                   onClick={() => {
                     setDistanceFilter(d);
                     setPlaces([]);
@@ -414,14 +545,7 @@ const IdeasPage = () => {
                     setExplanations({});
                     fetchPlaces(location, section, d);
                   }}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
-                    distanceFilter === d
-                      ? "bg-primary/15 border-primary/40 text-primary"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {d === "1000" ? "1 km" : d === "3000" ? "3 km" : "5 km"}
-                </button>
+                />
               ))}
             </div>
             <button
@@ -438,6 +562,51 @@ const IdeasPage = () => {
               Refresh
             </button>
           </div>
+
+          {/* Secondary filters — only show when results are loaded */}
+          {!placesLoading && places.length > 0 && (
+            <div className="space-y-2">
+              {section === "meals" ? (
+                <>
+                  {/* Cuisine type — dynamic from results */}
+                  {availableCuisines.length > 1 && (
+                    <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+                      <FilterPill label="All cuisine" active={cuisineFilter === "all"} onClick={() => setCuisineFilter("all")} />
+                      {availableCuisines.map((c) => (
+                        <FilterPill key={c} label={c} active={cuisineFilter === c} onClick={() => setCuisineFilter(c)} />
+                      ))}
+                    </div>
+                  )}
+                  {/* Goal alignment */}
+                  <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+                    <FilterPill label="Any goal" active={goalFilter === "all"} onClick={() => setGoalFilter("all")} />
+                    <FilterPill label="High protein" active={goalFilter === "high-protein"} onClick={() => setGoalFilter("high-protein")} />
+                    <FilterPill label="Low calorie" active={goalFilter === "low-calorie"} onClick={() => setGoalFilter("low-calorie")} />
+                    <FilterPill label="Balanced" active={goalFilter === "balanced"} onClick={() => setGoalFilter("balanced")} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Venue type */}
+                  <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+                    <FilterPill label="All venues" active={venueTypeFilter === "all"} onClick={() => setVenueTypeFilter("all")} />
+                    <FilterPill label="Gym" active={venueTypeFilter === "gym"} onClick={() => setVenueTypeFilter("gym")} />
+                    <FilterPill label="Yoga" active={venueTypeFilter === "yoga"} onClick={() => setVenueTypeFilter("yoga")} />
+                    <FilterPill label="Pilates" active={venueTypeFilter === "pilates"} onClick={() => setVenueTypeFilter("pilates")} />
+                    <FilterPill label="CrossFit" active={venueTypeFilter === "crossfit"} onClick={() => setVenueTypeFilter("crossfit")} />
+                    <FilterPill label="Other" active={venueTypeFilter === "other"} onClick={() => setVenueTypeFilter("other")} />
+                  </div>
+                  {/* Intensity */}
+                  <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+                    <FilterPill label="Any intensity" active={intensityFilter === "all"} onClick={() => setIntensityFilter("all")} />
+                    <FilterPill label="Low" active={intensityFilter === "low"} onClick={() => setIntensityFilter("low")} />
+                    <FilterPill label="Moderate" active={intensityFilter === "moderate"} onClick={() => setIntensityFilter("moderate")} />
+                    <FilterPill label="High" active={intensityFilter === "high"} onClick={() => setIntensityFilter("high")} />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Map */}
           <div className="rounded-2xl overflow-hidden border border-border relative" style={{ height: 220 }}>
@@ -483,7 +652,28 @@ const IdeasPage = () => {
             </div>
           )}
 
-          {/* Empty state */}
+          {/* Empty state — no results after filtering */}
+          {!placesLoading && !placesError && places.length > 0 && filteredPlaces.length === 0 && (
+            <div className="surface-elevated p-6 flex flex-col items-center text-center gap-3">
+              <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-muted">
+                <MapPin className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground text-sm">No matches for this filter</p>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  Try a different combination or clear the filters.
+                </p>
+              </div>
+              <button
+                onClick={resetFilters}
+                className="text-xs font-semibold text-primary"
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
+
+          {/* Empty state — no places at all */}
           {!placesLoading && !placesError && places.length === 0 && (
             <div className="surface-elevated p-8 flex flex-col items-center text-center gap-3">
               <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-muted">
@@ -509,12 +699,15 @@ const IdeasPage = () => {
           )}
 
           {/* Place cards */}
-          {!placesLoading && places.length > 0 && (
+          {!placesLoading && filteredPlaces.length > 0 && (
             <div className="space-y-3">
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold px-1">
-                {places.length} {section === "meals" ? "restaurants" : "venues"} within {distanceFilter === "1000" ? "1 km" : distanceFilter === "3000" ? "3 km" : "5 km"}
+                {filteredPlaces.length} {section === "meals" ? "restaurants" : "venues"} within {distanceLabel}
+                {filteredPlaces.length < places.length && (
+                  <span className="normal-case tracking-normal font-normal"> · {places.length - filteredPlaces.length} filtered out</span>
+                )}
               </p>
-              {places.map((place, idx) => (
+              {filteredPlaces.map((place, idx) => (
                 <PlaceCard
                   key={place.place_id}
                   place={place}
