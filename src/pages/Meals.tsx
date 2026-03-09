@@ -1,13 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, UtensilsCrossed, Loader2, Sparkles, Trash2, Send } from "lucide-react";
+import { Plus, UtensilsCrossed, Loader2, Sparkles, Trash2, Send, Mic, MicOff, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
+import { compressImage } from "@/lib/imageUtils";
+import { useVoiceRecording } from "@/hooks/useVoiceRecording";
 import TodayMealsView from "@/components/meals/TodayMealsView";
 import WeeklyMealsView from "@/components/meals/WeeklyMealsView";
 import MonthlyMealsView from "@/components/meals/MonthlyMealsView";
@@ -69,6 +71,26 @@ const Meals = () => {
   const [saving, setSaving]         = useState(false);
   const [tab, setTab]               = useState("today");
   const [targets, setTargets]       = useState(DEFAULT_TARGETS);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const mealFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleVoiceResult = useCallback((text: string) => {
+    setDescription((prev) => (prev ? prev + " " + text : text));
+  }, []);
+  const { isRecording, start: startRecording, stop: stopRecording, isSupported: voiceSupported } =
+    useVoiceRecording(handleVoiceResult);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file);
+      setPendingImage(compressed);
+    } catch {
+      toast.error("Failed to process image");
+    }
+    if (mealFileInputRef.current) mealFileInputRef.current.value = "";
+  };
 
   const fetchMeals = async () => {
     if (!user) return;
@@ -101,14 +123,17 @@ const Meals = () => {
 
   useEffect(() => { fetchMeals(); }, [user]);
 
-  const handleEstimate = async (text = description) => {
-    if (!text.trim()) return;
+  const handleEstimate = async (text = description, img = pendingImage) => {
+    if (!text.trim() && !img) return;
     setEstimating(true);
     setEstimate(null);
     try {
       const typeLabel = MEAL_TYPES.find((t) => t.value === mealType)?.label ?? mealType;
       const { data, error } = await supabase.functions.invoke("estimate-macros", {
-        body: { description: `${typeLabel}: ${text.trim()}` },
+        body: {
+          description: text.trim() ? `${typeLabel}: ${text.trim()}` : undefined,
+          image: img || undefined,
+        },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -140,6 +165,7 @@ const Meals = () => {
       setOpen(false);
       setDescription("");
       setEstimate(null);
+      setPendingImage(null);
       fetchMeals();
     } catch (e: any) {
       toast.error(e.message || "Failed to save meal");
@@ -168,7 +194,7 @@ const Meals = () => {
           <h1 className="text-2xl font-bold tracking-tight">Food</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Track your daily nutrition</p>
         </div>
-        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setDescription(""); setEstimate(null); setMealType("breakfast"); } }}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setDescription(""); setEstimate(null); setMealType("breakfast"); setPendingImage(null); } }}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-1.5">
               <Plus className="h-4 w-4" /> Log meal
@@ -218,7 +244,20 @@ const Meals = () => {
 
               {/* Chat-style input */}
               {!estimate && (
-                <div className="surface-elevated p-3">
+                <div className="surface-elevated p-3 space-y-2">
+                  {pendingImage && (
+                    <div className="relative inline-block">
+                      <div className="h-16 w-16 rounded-xl border border-border overflow-hidden">
+                        <img src={pendingImage} alt="Meal" className="h-full w-full object-cover" />
+                      </div>
+                      <button
+                        onClick={() => setPendingImage(null)}
+                        className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full p-0.5"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
                   <textarea
                     placeholder={`What did you have for ${MEAL_TYPES.find(t => t.value === mealType)?.label.toLowerCase()}?`}
                     value={description}
@@ -226,12 +265,43 @@ const Meals = () => {
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleEstimate(); } }}
                     disabled={estimating}
                     rows={2}
-                    className="w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none leading-relaxed"
+                    className={`w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none leading-relaxed ${isRecording ? "text-primary" : ""}`}
                   />
-                  <div className="flex justify-end mt-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => mealFileInputRef.current?.click()}
+                        disabled={estimating}
+                        className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                      <input
+                        ref={mealFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleImageUpload}
+                      />
+                      {voiceSupported && (
+                        <button
+                          type="button"
+                          onClick={isRecording ? stopRecording : startRecording}
+                          disabled={estimating}
+                          className={`h-8 w-8 flex items-center justify-center rounded-lg transition-all ${
+                            isRecording
+                              ? "bg-primary/15 text-primary"
+                              : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                          }`}
+                        >
+                          {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                        </button>
+                      )}
+                    </div>
                     <button
                       onClick={() => handleEstimate()}
-                      disabled={estimating || !description.trim()}
+                      disabled={estimating || (!description.trim() && !pendingImage)}
                       className="h-8 w-8 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all"
                     >
                       {estimating

@@ -52,10 +52,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       },
     });
     if (error) throw error;
+    // Explicitly send an OTP for email verification (bypasses template-based confirmation link)
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
+    if (otpError) throw otpError;
   };
 
   const verifyOtp = async (email: string, token: string) => {
-    const { error } = await supabase.auth.verifyOtp({ email, token, type: "signup" });
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
     if (error) throw error;
   };
 

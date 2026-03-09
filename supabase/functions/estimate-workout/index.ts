@@ -10,9 +10,11 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { description } = await req.json();
-    if (!description || typeof description !== "string" || description.trim().length === 0) {
-      return new Response(JSON.stringify({ error: "Description is required" }), {
+    const { description, image } = await req.json();
+    const hasDescription = typeof description === "string" && description.trim().length > 0;
+    const hasImage = typeof image === "string" && image.startsWith("data:");
+    if (!hasDescription && !hasImage) {
+      return new Response(JSON.stringify({ error: "Description or image is required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -35,7 +37,17 @@ serve(async (req) => {
           },
           {
             role: "user",
-            content: `Extract workout details from this description: "${description.trim()}"`,
+            content: hasImage
+              ? [
+                  { type: "image_url", image_url: { url: image } },
+                  {
+                    type: "text",
+                    text: hasDescription
+                      ? `Extract workout details from this description: "${description.trim()}"`
+                      : "Extract workout details from what is shown in this image.",
+                  },
+                ]
+              : `Extract workout details from this description: "${description.trim()}"`,
           },
         ],
         tools: [

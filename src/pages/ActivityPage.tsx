@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef, KeyboardEvent } from "react";
+import { useState, useEffect, useRef, useCallback, KeyboardEvent } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Dumbbell, RefreshCw, Clock, Flame, Trash2, Loader2, Send, Plus } from "lucide-react";
+import { Dumbbell, RefreshCw, Clock, Flame, Trash2, Loader2, Send, Plus, Mic, MicOff, X } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { toast } from "sonner";
+import { compressImage } from "@/lib/imageUtils";
+import { useVoiceRecording } from "@/hooks/useVoiceRecording";
 import WeeklyActivityView from "@/components/activity/WeeklyActivityView";
 import MonthlyActivityView from "@/components/activity/MonthlyActivityView";
 import SyncWorkoutsDialog from "@/components/activity/SyncWorkoutsDialog";
@@ -65,7 +67,28 @@ const ActivityPage = () => {
   const [estimating, setEstimating]       = useState(false);
   const [saving, setSaving]               = useState(false);
   const [estimate, setEstimate]           = useState<WorkoutEstimate | null>(null);
+  const [pendingImage, setPendingImage]   = useState<string | null>(null);
   const logTextareaRef                    = useRef<HTMLTextAreaElement>(null);
+  const activityFileInputRef              = useRef<HTMLInputElement>(null);
+
+  const handleVoiceResult = useCallback((text: string) => {
+    setLogText((prev) => (prev ? prev + " " + text : text));
+    logTextareaRef.current?.focus();
+  }, []);
+  const { isRecording, start: startRecording, stop: stopRecording, isSupported: voiceSupported } =
+    useVoiceRecording(handleVoiceResult);
+
+  const handleActivityImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file);
+      setPendingImage(compressed);
+    } catch {
+      toast.error("Failed to process image");
+    }
+    if (activityFileInputRef.current) activityFileInputRef.current.value = "";
+  };
 
   const fetchWorkouts = async () => {
     if (!user) return;
@@ -106,15 +129,15 @@ const ActivityPage = () => {
     }
   }, []);
 
-  const handleEstimateWorkout = async (text?: string) => {
+  const handleEstimateWorkout = async (text?: string, img = pendingImage) => {
     const input = (text ?? logText).trim();
-    if (!input) return;
+    if (!input && !img) return;
     if (!estimate) setLogText(text ?? logText);
     setEstimating(true);
     setEstimate(null);
     try {
       const { data, error } = await supabase.functions.invoke("estimate-workout", {
-        body: { description: input },
+        body: { description: input || undefined, image: img || undefined },
       });
       if (error) throw new Error(error.message);
       setEstimate(data as WorkoutEstimate);
@@ -144,6 +167,7 @@ const ActivityPage = () => {
       setLogOpen(false);
       setLogText("");
       setEstimate(null);
+      setPendingImage(null);
       fetchWorkouts();
     } catch (e: any) {
       toast.error(e.message || "Failed to save workout");
@@ -246,7 +270,7 @@ const ActivityPage = () => {
       <SyncWorkoutsDialog open={syncOpen} onOpenChange={setSyncOpen} onSynced={fetchWorkouts} />
 
       {/* ── Log Activity Dialog ────────────────────────────────── */}
-      <Dialog open={logOpen} onOpenChange={(o) => { setLogOpen(o); if (!o) { setLogText(""); setEstimate(null); } }}>
+      <Dialog open={logOpen} onOpenChange={(o) => { setLogOpen(o); if (!o) { setLogText(""); setEstimate(null); setPendingImage(null); } }}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-border/60" style={{ background: "hsl(var(--surface-base))" }}>
           <DialogHeader className="px-5 pt-5 pb-0">
             <DialogTitle className="text-base font-semibold">Log activity</DialogTitle>
@@ -270,7 +294,20 @@ const ActivityPage = () => {
 
             {/* Chat-style input */}
             {!estimate && (
-              <div className="surface-elevated p-3 flex items-end gap-2">
+              <div className="surface-elevated p-3 space-y-2">
+                {pendingImage && (
+                  <div className="relative inline-block">
+                    <div className="h-16 w-16 rounded-xl border border-border overflow-hidden">
+                      <img src={pendingImage} alt="Activity" className="h-full w-full object-cover" />
+                    </div>
+                    <button
+                      onClick={() => setPendingImage(null)}
+                      className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full p-0.5"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
                 <textarea
                   ref={logTextareaRef}
                   value={logText}
@@ -278,15 +315,48 @@ const ActivityPage = () => {
                   onKeyDown={handleLogKeyDown}
                   placeholder="Describe your workout… e.g. 45 min run at 5k pace"
                   rows={2}
-                  className="flex-1 bg-transparent resize-none text-sm outline-none placeholder:text-muted-foreground/60 leading-relaxed"
+                  className={`w-full bg-transparent resize-none text-sm outline-none placeholder:text-muted-foreground/60 leading-relaxed ${isRecording ? "text-primary" : ""}`}
                 />
-                <button
-                  onClick={() => handleEstimateWorkout()}
-                  disabled={!logText.trim() || estimating}
-                  className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
-                >
-                  {estimating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </button>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => activityFileInputRef.current?.click()}
+                      disabled={estimating}
+                      className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                    <input
+                      ref={activityFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleActivityImageUpload}
+                    />
+                    {voiceSupported && (
+                      <button
+                        type="button"
+                        onClick={isRecording ? stopRecording : startRecording}
+                        disabled={estimating}
+                        className={`h-8 w-8 flex items-center justify-center rounded-lg transition-all ${
+                          isRecording
+                            ? "bg-primary/15 text-primary"
+                            : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                        }`}
+                      >
+                        {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleEstimateWorkout()}
+                    disabled={(!logText.trim() && !pendingImage) || estimating}
+                    className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
+                  >
+                    {estimating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
             )}
 

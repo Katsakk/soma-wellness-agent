@@ -10,9 +10,11 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { description } = await req.json();
-    if (!description || typeof description !== "string" || description.trim().length === 0) {
-      return new Response(JSON.stringify({ error: "Description is required" }), {
+    const { description, image } = await req.json();
+    const hasDescription = typeof description === "string" && description.trim().length > 0;
+    const hasImage = typeof image === "string" && image.startsWith("data:");
+    if (!hasDescription && !hasImage) {
+      return new Response(JSON.stringify({ error: "Description or image is required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -42,7 +44,17 @@ serve(async (req) => {
           },
           {
             role: "user",
-            content: `Estimate the macros for this meal: "${description.trim()}"`,
+            content: hasImage
+              ? [
+                  { type: "image_url", image_url: { url: image } },
+                  {
+                    type: "text",
+                    text: hasDescription
+                      ? `Estimate the macros for this meal: "${description.trim()}"`
+                      : "Estimate the macros for the food shown in this image.",
+                  },
+                ]
+              : `Estimate the macros for this meal: "${description.trim()}"`,
           },
         ],
         tools: [
