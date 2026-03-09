@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Sparkles, MapPin, Star, Navigation, RefreshCw,
-  Loader2, AlertCircle, Utensils, Dumbbell,
+  Loader2, AlertCircle, Utensils, Dumbbell, RotateCcw,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -472,19 +472,24 @@ const IdeasPage = () => {
 
       {/* Location denied */}
       {locationStatus === "denied" && (
-        <div className="surface-elevated p-8 flex flex-col items-center text-center gap-4">
-          <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-muted">
-            <MapPin className="h-6 w-6 text-muted-foreground" />
+        <div className="surface-elevated p-10 flex flex-col items-center text-center gap-5 animate-fade-up">
+          <div className="flex items-center justify-center w-16 h-16 rounded-3xl bg-muted/60 border border-border">
+            <MapPin className="h-7 w-7 text-muted-foreground" />
           </div>
-          <div>
-            <p className="font-semibold text-foreground">Location access needed</p>
-            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed max-w-xs mx-auto">
-              Enable location to discover {section === "meals" ? "restaurants" : "fitness venues"} near you. Your location is only used during this session and never stored.
+          <div className="space-y-2 max-w-xs">
+            <p className="font-semibold text-foreground text-base">Location access needed</p>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {section === "meals"
+                ? "Share your location to find restaurants that match your nutritional goals right now."
+                : "Share your location to discover gyms and studios that fit your training goals nearby."}
+            </p>
+            <p className="text-xs text-muted-foreground/60">
+              Your location is only used this session and never stored.
             </p>
           </div>
           <button
             onClick={requestLocation}
-            className="px-5 py-2.5 text-sm font-semibold bg-primary text-primary-foreground rounded-xl"
+            className="px-6 py-3 text-sm font-semibold bg-primary text-primary-foreground rounded-xl transition-opacity hover:opacity-90"
           >
             Enable location
           </button>
@@ -493,9 +498,16 @@ const IdeasPage = () => {
 
       {/* Requesting */}
       {locationStatus === "requesting" && (
-        <div className="surface-elevated p-8 flex flex-col items-center text-center gap-3">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Getting your location…</p>
+        <div className="surface-elevated p-10 flex flex-col items-center text-center gap-4 animate-fade-up">
+          <div
+            className="flex items-center justify-center w-16 h-16 rounded-3xl bg-primary/10 animate-location-ring"
+          >
+            <MapPin className="h-7 w-7 text-primary" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-foreground">Locating you…</p>
+            <p className="text-xs text-muted-foreground">This only takes a moment</p>
+          </div>
         </div>
       )}
 
@@ -620,14 +632,20 @@ const IdeasPage = () => {
 
           {/* Error */}
           {placesError && (
-            <div className="surface-elevated p-4 flex items-center gap-3 rounded-2xl border border-destructive/20">
-              <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
-              <p className="text-sm text-muted-foreground flex-1">{placesError}</p>
+            <div className="surface-elevated p-5 flex flex-col items-center text-center gap-3 rounded-2xl border border-destructive/20 animate-fade-up">
+              <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-destructive/10">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">Couldn't load results</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{placesError}</p>
+              </div>
               <button
                 onClick={() => fetchPlaces(location, section, distanceFilter)}
-                className="text-xs font-semibold text-primary shrink-0"
+                className="flex items-center gap-1.5 text-xs font-semibold text-primary"
               >
-                Retry
+                <RotateCcw className="h-3 w-3" />
+                Try again
               </button>
             </div>
           )}
@@ -635,18 +653,24 @@ const IdeasPage = () => {
           {/* Loading skeletons */}
           {placesLoading && (
             <div className="space-y-3">
-              <div className="h-3 bg-muted rounded-full w-24 animate-pulse" />
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="surface-elevated p-4 space-y-3 animate-pulse">
-                  <div className="flex justify-between">
-                    <div className="space-y-1.5 flex-1">
-                      <div className="h-4 bg-muted rounded-full w-2/5" />
-                      <div className="h-3 bg-muted rounded-full w-3/5" />
+              <div className="skeleton h-2.5 w-28" style={{ animationDelay: "0ms" }} />
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="surface-elevated p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="skeleton h-8 w-8 rounded-xl shrink-0" style={{ borderRadius: 12, animationDelay: `${i * 80}ms` }} />
+                    <div className="flex-1 space-y-2 pt-0.5">
+                      <div className="skeleton h-3.5 w-2/5" style={{ animationDelay: `${i * 80 + 40}ms` }} />
+                      <div className="skeleton h-2.5 w-3/5" style={{ animationDelay: `${i * 80 + 80}ms` }} />
                     </div>
-                    <div className="h-4 bg-muted rounded-full w-12 shrink-0" />
+                    <div className="skeleton h-3 w-10 shrink-0 mt-1" style={{ animationDelay: `${i * 80 + 60}ms` }} />
                   </div>
-                  <div className="h-3 bg-muted rounded-full w-full" />
-                  <div className="h-5 bg-muted rounded-full w-20" />
+                  <div className="pl-11">
+                    <div className="skeleton h-2.5 w-4/5" style={{ animationDelay: `${i * 80 + 100}ms` }} />
+                  </div>
+                  <div className="pl-11 flex justify-between items-center">
+                    <div className="skeleton h-5 w-20" style={{ borderRadius: 999, animationDelay: `${i * 80 + 120}ms` }} />
+                    <div className="skeleton h-3 w-12" style={{ animationDelay: `${i * 80 + 140}ms` }} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -654,20 +678,21 @@ const IdeasPage = () => {
 
           {/* Empty state — no results after filtering */}
           {!placesLoading && !placesError && places.length > 0 && filteredPlaces.length === 0 && (
-            <div className="surface-elevated p-6 flex flex-col items-center text-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-muted">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
+            <div className="surface-elevated p-8 flex flex-col items-center text-center gap-4 animate-fade-up">
+              <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-muted/60 border border-border">
+                <MapPin className="h-5 w-5 text-muted-foreground" />
               </div>
-              <div>
+              <div className="space-y-1.5">
                 <p className="font-semibold text-foreground text-sm">No matches for this filter</p>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Try a different combination or clear the filters.
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-[220px] mx-auto">
+                  Try a different combination, or clear filters to see all results.
                 </p>
               </div>
               <button
                 onClick={resetFilters}
-                className="text-xs font-semibold text-primary"
+                className="flex items-center gap-1.5 text-xs font-semibold text-primary"
               >
+                <RotateCcw className="h-3 w-3" />
                 Clear filters
               </button>
             </div>
@@ -675,26 +700,28 @@ const IdeasPage = () => {
 
           {/* Empty state — no places at all */}
           {!placesLoading && !placesError && places.length === 0 && (
-            <div className="surface-elevated p-8 flex flex-col items-center text-center gap-3">
-              <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-muted">
-                <MapPin className="h-5 w-5 text-muted-foreground" />
+            <div className="surface-elevated p-10 flex flex-col items-center text-center gap-4 animate-fade-up">
+              <div className="flex items-center justify-center w-14 h-14 rounded-3xl bg-muted/60 border border-border">
+                <MapPin className="h-6 w-6 text-muted-foreground" />
               </div>
-              <div>
+              <div className="space-y-1.5">
                 <p className="font-semibold text-foreground text-sm">Nothing found nearby</p>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Try expanding the search radius to find more options.
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-[220px] mx-auto">
+                  There are no {section === "meals" ? "restaurants" : "fitness venues"} within {distanceLabel}. Try a wider radius.
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  const next = distanceFilter === "1000" ? "3000" : "5000";
-                  setDistanceFilter(next as DistanceFilter);
-                  fetchPlaces(location, section, next as DistanceFilter);
-                }}
-                className="text-xs font-semibold text-primary"
-              >
-                Expand to {distanceFilter === "1000" ? "3 km" : "5 km"}
-              </button>
+              {distanceFilter !== "5000" && (
+                <button
+                  onClick={() => {
+                    const next = distanceFilter === "1000" ? "3000" : "5000";
+                    setDistanceFilter(next as DistanceFilter);
+                    fetchPlaces(location, section, next as DistanceFilter);
+                  }}
+                  className="px-4 py-2 text-xs font-semibold bg-primary/10 text-primary rounded-xl border border-primary/20 transition-opacity hover:opacity-80"
+                >
+                  Expand to {distanceFilter === "1000" ? "3 km" : "5 km"}
+                </button>
+              )}
             </div>
           )}
 
@@ -708,14 +735,19 @@ const IdeasPage = () => {
                 )}
               </p>
               {filteredPlaces.map((place, idx) => (
-                <PlaceCard
+                <div
                   key={place.place_id}
-                  place={place}
-                  section={section}
-                  explanation={explanations[place.name]}
-                  explanationLoading={insightLoading}
-                  rank={idx + 1}
-                />
+                  className="animate-fade-up"
+                  style={{ animationDelay: `${idx * 50}ms` }}
+                >
+                  <PlaceCard
+                    place={place}
+                    section={section}
+                    explanation={explanations[place.name]}
+                    explanationLoading={insightLoading}
+                    rank={idx + 1}
+                  />
+                </div>
               ))}
             </div>
           )}
