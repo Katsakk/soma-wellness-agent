@@ -2,13 +2,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Sparkles, MapPin, Star, Navigation, RefreshCw, Loader2, AlertCircle, ChevronDown } from "lucide-react";
-import { toast } from "sonner";
+import {
+  Sparkles, MapPin, Star, Navigation, RefreshCw,
+  Loader2, AlertCircle, Utensils, Dumbbell,
+} from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Section = "meals" | "activity";
-
 type DistanceFilter = "1000" | "3000" | "5000";
 
 interface Place {
@@ -16,62 +17,64 @@ interface Place {
   name: string;
   vicinity: string;
   rating?: number;
+  user_ratings_total?: number;
   types: string[];
   geometry: { location: { lat: number; lng: number } };
-  distance?: number; // metres, computed client-side
-}
-
-interface AiInsight {
-  text: string;
-  loading: boolean;
+  distance?: number;
+  price_level?: number;
 }
 
 // ── Dark map style ─────────────────────────────────────────────────────────────
 
 const DARK_MAP_STYLES = [
-  { elementType: "geometry", stylers: [{ color: "#1a1a2e" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#1a1a2e" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8a8aaa" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2a2a3e" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1a1a2e" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#6b6b8a" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0f0f1a" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#3a3a5a" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#1e1e30" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#16213e" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#1e1e30" }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#2a2a3e" }] },
-  { featureType: "administrative.land_parcel", elementType: "labels.text.fill", stylers: [{ color: "#4a4a6a" }] },
+  { elementType: "geometry", stylers: [{ color: "#12121e" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#12121e" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#6b6b8a" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1e1e2e" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#12121e" }] },
+  { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#5a5a7a" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#252535" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#6b6b8a" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0a0a12" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#2a2a3a" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#181828" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#10101a" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#4a4a6a" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#181828" }] },
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#1e1e2e" }] },
+  { featureType: "administrative.land_parcel", elementType: "labels.text.fill", stylers: [{ color: "#3a3a5a" }] },
 ];
 
-// ── Meal cuisine keywords → display label ─────────────────────────────────────
+// ── Venue labels ──────────────────────────────────────────────────────────────
 
-const CUISINE_LABELS: Record<string, string> = {
+const MEAL_TYPE_LABELS: Record<string, string> = {
   restaurant: "Restaurant", cafe: "Café", bakery: "Bakery",
-  meal_takeaway: "Takeaway", food: "Food", bar: "Bar",
+  meal_takeaway: "Takeaway", bar: "Bar & Kitchen", food: "Food",
   japanese_restaurant: "Japanese", chinese_restaurant: "Chinese",
   italian_restaurant: "Italian", indian_restaurant: "Indian",
   thai_restaurant: "Thai", mexican_restaurant: "Mexican",
   mediterranean_restaurant: "Mediterranean", seafood_restaurant: "Seafood",
   american_restaurant: "American", french_restaurant: "French",
+  vietnamese_restaurant: "Vietnamese", korean_restaurant: "Korean",
+  vegetarian_restaurant: "Vegetarian", vegan_restaurant: "Vegan",
 };
 
-const FITNESS_LABELS: Record<string, string> = {
-  gym: "Gym", yoga_studio: "Yoga", pilates: "Pilates",
-  health: "Health Club", spa: "Spa / Wellness",
+const FITNESS_TYPE_LABELS: Record<string, string> = {
+  gym: "Gym", health: "Health Club", spa: "Spa & Wellness",
   swimming_pool: "Swimming Pool", stadium: "Stadium",
   sports_complex: "Sports Complex", fitness_center: "Fitness Centre",
+  yoga_studio: "Yoga", pilates: "Pilates", dance_school: "Dance / Classes",
 };
 
-function getPlaceLabel(types: string[], section: Section): string {
-  const dict = section === "meals" ? CUISINE_LABELS : FITNESS_LABELS;
+function getTypeLabel(types: string[], section: Section): string {
+  const dict = section === "meals" ? MEAL_TYPE_LABELS : FITNESS_TYPE_LABELS;
   for (const t of types) {
     if (dict[t]) return dict[t];
   }
   return section === "meals" ? "Restaurant" : "Fitness Venue";
 }
 
-function distanceLabel(m: number): string {
+function formatDistance(m: number): string {
   return m < 1000 ? `${m}m` : `${(m / 1000).toFixed(1)}km`;
 }
 
@@ -81,8 +84,14 @@ function haversineMetres(lat1: number, lon1: number, lat2: number, lon2: number)
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function priceDots(level?: number): string {
+  if (!level) return "";
+  return "·".repeat(level) + "○".repeat(Math.max(0, 4 - level));
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────────
@@ -90,52 +99,47 @@ function haversineMetres(lat1: number, lon1: number, lat2: number, lon2: number)
 const IdeasPage = () => {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialSection = (searchParams.get("section") as Section) || "meals";
-  const [section, setSection] = useState<Section>(initialSection);
+  const [section, setSection] = useState<Section>(
+    (searchParams.get("section") as Section) || "meals"
+  );
 
-  // Location
-  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationStatus, setLocationStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Places
   const [places, setPlaces] = useState<Place[]>([]);
   const [placesLoading, setPlacesLoading] = useState(false);
   const [placesError, setPlacesError] = useState<string | null>(null);
 
-  // Filters
   const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>("1000");
-  const [cuisineFilter, setCuisineFilter] = useState<string>("all");
-  const [goalFilter, setGoalFilter] = useState<string>("all");
 
-  // AI insight
-  const [insight, setInsight] = useState<AiInsight>({ text: "", loading: false });
+  const [insightText, setInsightText] = useState("");
+  const [explanations, setExplanations] = useState<Record<string, string>>({});
+  const [insightLoading, setInsightLoading] = useState(false);
 
-  // Map
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const mapsReadyRef = useRef(false);
 
-  // Update URL when section changes
+  // ── Section switch ─────────────────────────────────────────────────────────
+
   const switchSection = (s: Section) => {
     setSection(s);
     setSearchParams({ section: s });
     setPlaces([]);
-    setInsight({ text: "", loading: false });
-    if (location) fetchPlaces(location, s, distanceFilter);
+    setInsightText("");
+    setExplanations({});
+    if (location && mapsReadyRef.current) fetchPlaces(location, s, distanceFilter);
   };
 
-  // ── Location ──────────────────────────────────────────────────────────────
+  // ── Location ───────────────────────────────────────────────────────────────
 
   const requestLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      setLocationStatus("denied");
-      return;
-    }
+    if (!navigator.geolocation) { setLocationStatus("denied"); return; }
     setLocationStatus("requesting");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setLocation(coords);
+        setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setLocationStatus("granted");
       },
       () => setLocationStatus("denied"),
@@ -143,29 +147,49 @@ const IdeasPage = () => {
     );
   }, []);
 
-  useEffect(() => {
-    requestLocation();
-  }, [requestLocation]);
+  useEffect(() => { requestLocation(); }, [requestLocation]);
 
-  // ── Google Maps ──────────────────────────────────────────────────────────
+  // ── Google Maps init ───────────────────────────────────────────────────────
 
   const initMap = useCallback((coords: { lat: number; lng: number }) => {
-    if (!mapRef.current || !window.google) return;
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.setCenter(coords);
-      return;
-    }
+    if (!mapRef.current || !window.google || mapInstanceRef.current) return;
     mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
       center: coords,
       zoom: 15,
       styles: DARK_MAP_STYLES,
       disableDefaultUI: true,
       zoomControl: true,
-      zoomControlOptions: {
-        position: window.google.maps.ControlPosition.RIGHT_CENTER,
-      },
+      zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_CENTER },
+      gestureHandling: "cooperative",
     });
+    mapsReadyRef.current = true;
   }, []);
+
+  useEffect(() => {
+    if (window.google) return;
+    const existing = document.querySelector('script[src*="maps.googleapis.com"]');
+    if (existing) return;
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.async = true;
+    document.head.appendChild(script);
+  }, []);
+
+  useEffect(() => {
+    if (!location) return;
+    const try_ = () => {
+      if (window.google) {
+        initMap(location);
+        mapsReadyRef.current = true;
+        fetchPlaces(location, section, distanceFilter);
+      } else {
+        setTimeout(try_, 250);
+      }
+    };
+    setTimeout(try_, 300);
+  }, [location]);
+
+  // ── Update markers ─────────────────────────────────────────────────────────
 
   const updateMarkers = useCallback((results: Place[]) => {
     if (!mapInstanceRef.current || !window.google) return;
@@ -178,231 +202,155 @@ const IdeasPage = () => {
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
           scale: 8,
-          fillColor: "hsl(180, 70%, 55%)",
+          fillColor: "hsl(180, 65%, 55%)",
           fillOpacity: 1,
-          strokeColor: "hsl(180, 70%, 80%)",
+          strokeColor: "rgba(255,255,255,0.3)",
           strokeWeight: 2,
         },
       });
       return marker;
     });
-  }, []);
+    // Pan to user's location
+    if (results.length > 0 && location) {
+      mapInstanceRef.current!.setCenter(new window.google.maps.LatLng(location.lat, location.lng));
+    }
+  }, [location]);
 
-  // Load Google Maps script once
-  useEffect(() => {
-    if (window.google) return;
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`;
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
-  }, []);
-
-  // Init map when location is granted
-  useEffect(() => {
-    if (!location) return;
-    const tryInit = () => {
-      if (window.google) { initMap(location); return; }
-      setTimeout(tryInit, 200);
-    };
-    tryInit();
-  }, [location, initMap]);
-
-  // ── Places API ────────────────────────────────────────────────────────────
+  // ── Places API ─────────────────────────────────────────────────────────────
 
   const fetchPlaces = useCallback(
-    async (coords: { lat: number; lng: number }, sec: Section, radius: DistanceFilter) => {
+    (coords: { lat: number; lng: number }, sec: Section, radius: DistanceFilter) => {
+      if (!window.google) return;
       setPlacesLoading(true);
       setPlacesError(null);
-      try {
-        const types = sec === "meals"
-          ? "restaurant|cafe|bakery|meal_takeaway"
-          : "gym|health|spa|stadium|swimming_pool";
+      setPlaces([]);
 
-        const url =
-          `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
-          `?location=${coords.lat},${coords.lng}` +
-          `&radius=${radius}` +
-          `&type=${sec === "meals" ? "restaurant" : "gym"}` +
-          `&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`;
+      const dummy = mapInstanceRef.current || (() => {
+        const div = document.createElement("div");
+        return new window.google.maps.Map(div, { center: coords, zoom: 15 });
+      })();
 
-        // Use a CORS proxy via our Supabase edge function approach — call via fetch with no-cors will fail
-        // Instead, use Google Maps JS API Places service directly in the browser
-        if (!window.google) {
-          setPlacesError("Map not ready yet. Please wait a moment and retry.");
-          return;
-        }
+      const service = new window.google.maps.places.PlacesService(dummy);
+      const request: google.maps.places.PlaceSearchRequest = {
+        location: new window.google.maps.LatLng(coords.lat, coords.lng),
+        radius: parseInt(radius),
+        type: sec === "meals" ? "restaurant" : "gym",
+        rankBy: undefined,
+      };
 
-        const service = new window.google.maps.places.PlacesService(
-          mapInstanceRef.current || document.createElement("div")
-        );
-
-        const request: google.maps.places.PlaceSearchRequest = {
-          location: new window.google.maps.LatLng(coords.lat, coords.lng),
-          radius: parseInt(radius),
-          type: sec === "meals" ? "restaurant" : "gym",
-        };
-
-        service.nearbySearch(request, (results, status) => {
-          if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
-            const mapped: Place[] = results.slice(0, 15).map((r) => ({
-              place_id: r.place_id!,
-              name: r.name!,
-              vicinity: r.vicinity || "",
-              rating: r.rating,
-              types: r.types || [],
-              geometry: {
-                location: {
-                  lat: r.geometry!.location!.lat(),
-                  lng: r.geometry!.location!.lng(),
-                },
+      service.nearbySearch(request, (results, status) => {
+        if (
+          status === window.google.maps.places.PlacesServiceStatus.OK && results
+        ) {
+          const mapped: Place[] = results.slice(0, 12).map((r) => ({
+            place_id: r.place_id!,
+            name: r.name!,
+            vicinity: r.vicinity || "",
+            rating: r.rating,
+            user_ratings_total: (r as any).user_ratings_total,
+            types: r.types || [],
+            price_level: (r as any).price_level,
+            geometry: {
+              location: {
+                lat: r.geometry!.location!.lat(),
+                lng: r.geometry!.location!.lng(),
               },
-              distance: Math.round(haversineMetres(coords.lat, coords.lng, r.geometry!.location!.lat(), r.geometry!.location!.lng())),
-            }));
-            const sorted = mapped.sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
-            setPlaces(sorted);
-            updateMarkers(sorted);
-            fetchAiInsight(sorted, sec);
-          } else if (status === window.google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-            setPlaces([]);
-          } else {
-            setPlacesError("Could not fetch nearby places. Try again.");
-          }
+            },
+            distance: haversineMetres(
+              coords.lat, coords.lng,
+              r.geometry!.location!.lat(), r.geometry!.location!.lng()
+            ),
+          })).sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
+
+          setPlaces(mapped);
+          updateMarkers(mapped);
+          fetchInsight(mapped, sec);
+        } else if (
+          status === window.google.maps.places.PlacesServiceStatus.ZERO_RESULTS
+        ) {
+          setPlaces([]);
           setPlacesLoading(false);
-        });
-      } catch (e) {
-        setPlacesError("Something went wrong. Please retry.");
-        setPlacesLoading(false);
-      }
+        } else {
+          setPlacesError("Could not fetch nearby places. Please retry.");
+          setPlacesLoading(false);
+        }
+      });
     },
     [updateMarkers]
   );
 
-  // Auto-fetch when location + map ready
-  useEffect(() => {
-    if (locationStatus !== "granted" || !location) return;
-    const tryFetch = () => {
-      if (window.google && mapInstanceRef.current) {
-        fetchPlaces(location, section, distanceFilter);
-        return;
-      }
-      setTimeout(tryFetch, 300);
-    };
-    setTimeout(tryFetch, 600);
-  }, [locationStatus, location, section, distanceFilter, fetchPlaces]);
+  // ── AI Insight ─────────────────────────────────────────────────────────────
 
-  // ── AI Insight ────────────────────────────────────────────────────────────
-
-  const fetchAiInsight = async (results: Place[], sec: Section) => {
-    if (!user) return;
-    setInsight({ text: "", loading: true });
+  const fetchInsight = async (results: Place[], sec: Section) => {
+    if (!user || results.length === 0) { setPlacesLoading(false); return; }
+    setInsightLoading(true);
+    setPlacesLoading(false);
     try {
-      // Fetch today's data for context
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const [mealsRes, workoutsRes, goalsRes] = await Promise.all([
-        supabase.from("meals").select("name, calories, protein, carbs, fats").eq("user_id", user.id).gte("meal_time", todayStart.toISOString()),
-        supabase.from("workouts").select("name, duration, calories_burned").eq("user_id", user.id).gte("completed_at", todayStart.toISOString()),
-        supabase.from("goals").select("target_calories, target_protein, goal_type").eq("user_id", user.id).eq("is_active", true).limit(1),
-      ]);
-
-      const meals = mealsRes.data || [];
-      const workouts = workoutsRes.data || [];
-      const goal = goalsRes.data?.[0] as any;
-
-      const totalCals = meals.reduce((s: number, m: any) => s + (m.calories || 0), 0);
-      const totalProtein = meals.reduce((s: number, m: any) => s + (Number(m.protein) || 0), 0);
-      const targetCals = goal?.target_calories || 2000;
-      const targetProtein = goal?.target_protein || 150;
-
-      const nearbyNames = results.slice(0, 5).map((p) => p.name).join(", ");
-
-      const prompt = sec === "meals"
-        ? `The user has eaten ${totalCals} kcal of ${targetCals} target today, with ${totalProtein}g of ${targetProtein}g protein target. Nearby: ${nearbyNames}. In 1-2 sentences, explain what macros/nutrients they still need and why these nearby spots are a good match. Be specific and actionable.`
-        : `The user has logged ${workouts.length} workout(s) today (${workouts.reduce((s: number, w: any) => s + (w.duration || 0), 0)} min total). Goal: ${goal?.goal_type || "general fitness"}. Nearby: ${nearbyNames}. In 1-2 sentences, explain what type of movement would complement their day and why these venues are a good fit. Be specific and actionable.`;
-
-      const { data, error } = await supabase.functions.invoke("estimate-macros", {
-        body: { description: prompt },
+      const { data, error } = await supabase.functions.invoke("ideas-insight", {
+        body: {
+          section: sec,
+          userId: user.id,
+          places: results.slice(0, 8).map((p) => ({
+            name: p.name,
+            types: p.types,
+            rating: p.rating,
+            distance: p.distance,
+          })),
+        },
       });
-
-      // The estimate-macros function isn't ideal here — use a simple heuristic instead
-      if (sec === "meals") {
-        const proteinGap = Math.max(0, targetProtein - totalProtein);
-        const calGap = Math.max(0, targetCals - totalCals);
-        if (proteinGap > 20) {
-          setInsight({ text: `You're ${proteinGap}g short on protein today with ${calGap} kcal remaining. Look for high-protein options like grilled chicken, fish, or tofu at these nearby spots.`, loading: false });
-        } else if (calGap > 500) {
-          setInsight({ text: `You have ${calGap} kcal left for the day. These nearby restaurants offer a range of options to help you hit your calorie and macro targets.`, loading: false });
-        } else {
-          setInsight({ text: `You're on track today with ${totalCals} kcal logged. These nearby spots are great for a lighter meal or snack to close out the day.`, loading: false });
-        }
-      } else {
-        const totalMin = workouts.reduce((s: number, w: any) => s + (w.duration || 0), 0);
-        if (totalMin === 0) {
-          setInsight({ text: `No activity logged yet today. These nearby venues offer a great opportunity to get moving — even a 30-minute session will support your ${goal?.goal_type || "fitness"} goal.`, loading: false });
-        } else {
-          setInsight({ text: `You've logged ${totalMin} active minutes today. These venues are a great option if you want to add another session or try something different.`, loading: false });
-        }
-      }
+      if (error) throw error;
+      setInsightText(data.insight || "");
+      setExplanations(data.explanations || {});
     } catch {
-      setInsight({ text: "", loading: false });
+      setInsightText("");
+      setExplanations({});
+    } finally {
+      setInsightLoading(false);
     }
   };
 
-  // ── Filtered places ───────────────────────────────────────────────────────
-
-  const filteredPlaces = places.filter((p) => {
-    if (cuisineFilter !== "all") {
-      if (!p.types.some((t) => t.includes(cuisineFilter))) return false;
-    }
-    return true;
-  });
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8 space-y-5 pb-32">
 
-      {/* ── Header ─────────────────────────────────────────────── */}
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Ideas</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Personalised recommendations near you</p>
       </div>
 
-      {/* ── Section toggle ─────────────────────────────────────── */}
+      {/* Section toggle */}
       <div className="flex gap-1 p-1 rounded-2xl bg-card border border-border">
-        <button
-          onClick={() => switchSection("meals")}
-          className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 ${
-            section === "meals"
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Meal Ideas
-        </button>
-        <button
-          onClick={() => switchSection("activity")}
-          className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 ${
-            section === "activity"
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Activity Ideas
-        </button>
+        {([
+          { key: "meals", label: "Meal Ideas", Icon: Utensils },
+          { key: "activity", label: "Activity Ideas", Icon: Dumbbell },
+        ] as { key: Section; label: string; Icon: React.ElementType }[]).map(({ key, label, Icon }) => (
+          <button
+            key={key}
+            onClick={() => switchSection(key)}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 ${
+              section === key
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* ── Location denied ────────────────────────────────────── */}
+      {/* Location denied */}
       {locationStatus === "denied" && (
-        <div className="surface-elevated p-6 flex flex-col items-center text-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-muted">
-            <MapPin className="h-5 w-5 text-muted-foreground" />
+        <div className="surface-elevated p-8 flex flex-col items-center text-center gap-4">
+          <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-muted">
+            <MapPin className="h-6 w-6 text-muted-foreground" />
           </div>
           <div>
-            <p className="font-semibold text-foreground">Location needed</p>
-            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-              Enable location access to see personalised recommendations near you. Your location is only used during this session and never stored.
+            <p className="font-semibold text-foreground">Location access needed</p>
+            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed max-w-xs mx-auto">
+              Enable location to discover {section === "meals" ? "restaurants" : "fitness venues"} near you. Your location is only used during this session and never stored.
             </p>
           </div>
           <button
@@ -414,122 +362,167 @@ const IdeasPage = () => {
         </div>
       )}
 
-      {/* ── Location requesting ────────────────────────────────── */}
+      {/* Requesting */}
       {locationStatus === "requesting" && (
-        <div className="surface-elevated p-6 flex flex-col items-center text-center gap-3">
+        <div className="surface-elevated p-8 flex flex-col items-center text-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Requesting your location…</p>
+          <p className="text-sm text-muted-foreground">Getting your location…</p>
         </div>
       )}
 
-      {/* ── Main content (location granted) ───────────────────── */}
+      {/* Main content */}
       {locationStatus === "granted" && location && (
         <>
-          {/* AI Insight card */}
-          <div className="surface-ai rounded-2xl p-4 shadow-glow-ai">
+          {/* AI Insight */}
+          <div className="surface-ai rounded-2xl p-4 shadow-glow-ai min-h-[72px]">
             <div className="flex items-start gap-3">
               <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-metric-ai/15 shrink-0 mt-0.5">
-                {insight.loading
+                {insightLoading
                   ? <Loader2 className="h-4 w-4 text-metric-ai animate-spin" />
                   : <Sparkles className="h-4 w-4 text-metric-ai" />}
               </div>
               <div className="flex-1">
                 <p className="text-[10px] uppercase tracking-widest text-metric-ai font-semibold mb-1">AI Insight</p>
-                {insight.loading ? (
-                  <div className="space-y-1.5">
+                {insightLoading ? (
+                  <div className="space-y-1.5 pt-0.5">
                     <div className="h-3 rounded-full bg-metric-ai/10 w-full animate-pulse" />
-                    <div className="h-3 rounded-full bg-metric-ai/10 w-3/4 animate-pulse" />
+                    <div className="h-3 rounded-full bg-metric-ai/10 w-2/3 animate-pulse" />
                   </div>
-                ) : insight.text ? (
-                  <p className="text-sm text-foreground/90 leading-relaxed">{insight.text}</p>
+                ) : insightText ? (
+                  <p className="text-sm text-foreground/90 leading-relaxed">{insightText}</p>
                 ) : (
-                  <p className="text-sm text-foreground/60 leading-relaxed">Finding the best spots for your goals today…</p>
+                  <p className="text-sm text-foreground/50 leading-relaxed">
+                    {placesLoading
+                      ? "Finding the best spots near you…"
+                      : "Finding personalised recommendations…"}
+                  </p>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Distance filter */}
+          {/* Distance filter + refresh */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground uppercase tracking-widest font-semibold shrink-0">Radius</span>
             <div className="flex gap-1">
               {(["1000", "3000", "5000"] as DistanceFilter[]).map((d) => (
                 <button
                   key={d}
                   onClick={() => {
                     setDistanceFilter(d);
+                    setPlaces([]);
+                    setInsightText("");
+                    setExplanations({});
                     fetchPlaces(location, section, d);
                   }}
                   className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
                     distanceFilter === d
                       ? "bg-primary/15 border-primary/40 text-primary"
-                      : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+                      : "border-border text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {d === "1000" ? "1km" : d === "3000" ? "3km" : "5km"}
+                  {d === "1000" ? "1 km" : d === "3000" ? "3 km" : "5 km"}
                 </button>
               ))}
             </div>
             <button
-              onClick={() => fetchPlaces(location, section, distanceFilter)}
-              disabled={placesLoading}
-              className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => {
+                setPlaces([]);
+                setInsightText("");
+                setExplanations({});
+                fetchPlaces(location, section, distanceFilter);
+              }}
+              disabled={placesLoading || insightLoading}
+              className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${placesLoading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${(placesLoading || insightLoading) ? "animate-spin" : ""}`} />
               Refresh
             </button>
           </div>
 
           {/* Map */}
-          <div className="rounded-2xl overflow-hidden border border-border" style={{ height: 220 }}>
+          <div className="rounded-2xl overflow-hidden border border-border relative" style={{ height: 220 }}>
             {placesLoading && (
-              <div className="h-full flex items-center justify-center bg-card">
+              <div className="absolute inset-0 flex items-center justify-center bg-card z-10">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             )}
-            <div ref={mapRef} className="w-full h-full" style={{ display: placesLoading ? "none" : "block" }} />
+            <div ref={mapRef} className="w-full h-full" />
           </div>
 
           {/* Error */}
           {placesError && (
-            <div className="surface-elevated p-4 flex items-center gap-3 rounded-2xl">
+            <div className="surface-elevated p-4 flex items-center gap-3 rounded-2xl border border-destructive/20">
               <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
               <p className="text-sm text-muted-foreground flex-1">{placesError}</p>
               <button
                 onClick={() => fetchPlaces(location, section, distanceFilter)}
-                className="text-xs font-semibold text-primary"
+                className="text-xs font-semibold text-primary shrink-0"
               >
                 Retry
               </button>
             </div>
           )}
 
-          {/* Place cards */}
-          {placesLoading ? (
+          {/* Loading skeletons */}
+          {placesLoading && (
             <div className="space-y-3">
+              <div className="h-3 bg-muted rounded-full w-24 animate-pulse" />
               {[1, 2, 3].map((i) => (
-                <div key={i} className="surface-elevated p-4 space-y-2 animate-pulse">
-                  <div className="h-4 bg-muted rounded-full w-1/2" />
-                  <div className="h-3 bg-muted rounded-full w-3/4" />
-                  <div className="h-3 bg-muted rounded-full w-1/3" />
+                <div key={i} className="surface-elevated p-4 space-y-3 animate-pulse">
+                  <div className="flex justify-between">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="h-4 bg-muted rounded-full w-2/5" />
+                      <div className="h-3 bg-muted rounded-full w-3/5" />
+                    </div>
+                    <div className="h-4 bg-muted rounded-full w-12 shrink-0" />
+                  </div>
+                  <div className="h-3 bg-muted rounded-full w-full" />
+                  <div className="h-5 bg-muted rounded-full w-20" />
                 </div>
               ))}
             </div>
-          ) : filteredPlaces.length === 0 && !placesError ? (
-            <div className="surface-elevated p-6 flex flex-col items-center text-center gap-3">
-              <MapPin className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="font-semibold text-foreground text-sm">No results nearby</p>
-                <p className="text-xs text-muted-foreground mt-1">Try expanding the search radius to find more options.</p>
+          )}
+
+          {/* Empty state */}
+          {!placesLoading && !placesError && places.length === 0 && (
+            <div className="surface-elevated p-8 flex flex-col items-center text-center gap-3">
+              <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-muted">
+                <MapPin className="h-5 w-5 text-muted-foreground" />
               </div>
+              <div>
+                <p className="font-semibold text-foreground text-sm">Nothing found nearby</p>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  Try expanding the search radius to find more options.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const next = distanceFilter === "1000" ? "3000" : "5000";
+                  setDistanceFilter(next as DistanceFilter);
+                  fetchPlaces(location, section, next as DistanceFilter);
+                }}
+                className="text-xs font-semibold text-primary"
+              >
+                Expand to {distanceFilter === "1000" ? "3 km" : "5 km"}
+              </button>
             </div>
-          ) : (
+          )}
+
+          {/* Place cards */}
+          {!placesLoading && places.length > 0 && (
             <div className="space-y-3">
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold px-1">
-                {filteredPlaces.length} {section === "meals" ? "restaurants" : "venues"} nearby
+                {places.length} {section === "meals" ? "restaurants" : "venues"} within {distanceFilter === "1000" ? "1 km" : distanceFilter === "3000" ? "3 km" : "5 km"}
               </p>
-              {filteredPlaces.map((place) => (
-                <PlaceCard key={place.place_id} place={place} section={section} />
+              {places.map((place, idx) => (
+                <PlaceCard
+                  key={place.place_id}
+                  place={place}
+                  section={section}
+                  explanation={explanations[place.name]}
+                  explanationLoading={insightLoading}
+                  rank={idx + 1}
+                />
               ))}
             </div>
           )}
@@ -541,51 +534,96 @@ const IdeasPage = () => {
 
 // ── Place card ─────────────────────────────────────────────────────────────────
 
-function PlaceCard({ place, section }: { place: Place; section: Section }) {
-  const label = getPlaceLabel(place.types, section);
+interface PlaceCardProps {
+  place: Place;
+  section: Section;
+  explanation?: string;
+  explanationLoading: boolean;
+  rank: number;
+}
+
+function PlaceCard({ place, section, explanation, explanationLoading, rank }: PlaceCardProps) {
+  const typeLabel = getTypeLabel(place.types, section);
+  const colorToken = section === "meals" ? "--metric-calories" : "--metric-activity";
 
   return (
-    <div className="surface-elevated p-4 space-y-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-sm text-foreground truncate">{place.name}</p>
+    <div className="surface-elevated p-4 space-y-3 transition-all duration-200 hover:border-border/80">
+      {/* Top row */}
+      <div className="flex items-start gap-3">
+        {/* Rank badge */}
+        <div
+          className="flex items-center justify-center w-8 h-8 rounded-xl shrink-0 text-xs font-bold"
+          style={{
+            backgroundColor: `hsl(var(${colorToken}) / 0.12)`,
+            color: `hsl(var(${colorToken}))`,
+          }}
+        >
+          {rank}
+        </div>
+
+        {/* Name + address */}
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm text-foreground leading-tight">{place.name}</p>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">{place.vicinity}</p>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {place.distance !== undefined && (
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-              <Navigation className="h-2.5 w-2.5" />
-              {distanceLabel(place.distance)}
+
+        {/* Distance */}
+        {place.distance !== undefined && (
+          <div className="flex items-center gap-1 shrink-0 text-xs text-muted-foreground">
+            <Navigation className="h-3 w-3" />
+            <span>{formatDistance(place.distance)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* AI explanation */}
+      <div className="pl-11">
+        {explanationLoading ? (
+          <div className="h-3 bg-muted/50 rounded-full w-4/5 animate-pulse" />
+        ) : explanation ? (
+          <p className="text-xs text-foreground/70 leading-relaxed">{explanation}</p>
+        ) : null}
+      </div>
+
+      {/* Bottom row: type badge + rating */}
+      <div className="pl-11 flex items-center justify-between">
+        <span
+          className="text-[10px] font-semibold px-2.5 py-1 rounded-full"
+          style={{
+            backgroundColor: `hsl(var(${colorToken}) / 0.10)`,
+            color: `hsl(var(${colorToken}))`,
+          }}
+        >
+          {typeLabel}
+        </span>
+
+        <div className="flex items-center gap-2">
+          {place.price_level !== undefined && place.price_level > 0 && (
+            <span className="text-[10px] text-muted-foreground tracking-wider">
+              {"$".repeat(place.price_level)}
             </span>
           )}
           {place.rating && (
-            <span className="flex items-center gap-0.5 text-[10px] font-semibold text-amber-400">
-              <Star className="h-2.5 w-2.5 fill-amber-400" />
+            <span className="flex items-center gap-1 text-xs font-semibold text-amber-400">
+              <Star className="h-3 w-3 fill-amber-400 stroke-none" />
               {place.rating.toFixed(1)}
+              {place.user_ratings_total && (
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  ({place.user_ratings_total > 999
+                    ? `${(place.user_ratings_total / 1000).toFixed(1)}k`
+                    : place.user_ratings_total})
+                </span>
+              )}
             </span>
           )}
         </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <span
-          className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-          style={{
-            backgroundColor: section === "meals" ? "hsl(var(--metric-calories) / 0.12)" : "hsl(var(--metric-activity) / 0.12)",
-            color: section === "meals" ? "hsl(var(--metric-calories))" : "hsl(var(--metric-activity))",
-          }}
-        >
-          {label}
-        </span>
       </div>
     </div>
   );
 }
 
-// Make sure google maps types don't break builds
 declare global {
-  interface Window {
-    google: typeof google;
-  }
+  interface Window { google: typeof google; }
 }
 
 export default IdeasPage;
