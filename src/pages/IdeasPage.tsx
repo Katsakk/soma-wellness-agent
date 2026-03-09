@@ -370,10 +370,8 @@ const IdeasPage = () => {
           fields: ["id", "displayName", "location", "types", "formattedAddress",
                    "rating", "userRatingCount", "priceLevel"],
           locationRestriction: {
-            circle: {
-              center: new window.google.maps.LatLng(coords.lat, coords.lng),
-              radius: parseFloat(radius),
-            },
+            center: { lat: coords.lat, lng: coords.lng },
+            radius: parseFloat(radius),
           },
           includedTypes: [sec === "meals" ? "restaurant" : "gym"],
           maxResultCount: 12,
