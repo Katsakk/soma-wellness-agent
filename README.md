@@ -1,224 +1,112 @@
-# Soma Wellness Agent
+# Soma — Adaptive Wellness Intelligence
 
-A premium AI-powered personal wellness app that tracks nutrition, workouts, and activity — with a conversational AI coach, location-aware recommendations, and third-party integrations.
+> An AI-powered personal wellness agent that learns your body, your schedule, and your goals — and gives you one clear picture of your health every day.
 
----
-
-## Overview
-
-Soma is a dark-themed mobile-first web app that helps users:
-
-- **Log meals** with AI macro estimation (describe or photograph your food)
-- **Track workouts** manually or synced from Strava and Gmail booking confirmations
-- **Chat with an AI coach** that has full context of your goals, meals, and activity
-- **Discover nearby restaurants and fitness venues** tailored to your nutritional and training goals
-- **View a calendar** of past and upcoming sessions pulled from connected integrations
+**Live:** [soma-wellness-agent.vercel.app](https://soma-wellness-agent.vercel.app/)
 
 ---
 
-## Tech Stack
+## The Problem
 
-| Layer | Technology |
+Most people trying to improve their health are working with fragmented data and generic advice.
+
+Your fitness tracker counts steps. Your nutrition app logs calories. Your gym sends booking confirmations. Your coach gives static meal plans. None of these talk to each other — and none of them adapt to what actually happened today.
+
+The result: people either over-invest in manual tracking (logging every gram of food, entering every workout) and burn out, or they rely on one-size-fits-all plans that don't reflect their real life. Neither works long-term.
+
+---
+
+## Target User
+
+Soma is built for the **health-conscious professional** — someone who:
+
+- Already exercises and thinks about nutrition, but wants to optimise, not just track
+- Has limited time and high standards; friction is the enemy of consistency
+- Uses multiple tools (gym apps, running trackers, food photos) but lacks a unified view
+- Wants intelligence, not just data — "what should I do today?" not just "here's what you did"
+
+This is not a beginner calorie counter. It's a personal performance layer for people who already have the habit but want sharper insight.
+
+---
+
+## Product Vision
+
+**One agent that knows your whole health picture.**
+
+Soma connects your meals, workouts, energy, and goals into a single adaptive coach. Instead of switching between five apps and interpreting data yourself, you ask Soma — and it answers with full context: what you ate, how you trained, what your goals are, and what's nearby that fits your plan.
+
+The long-term vision is a wellness agent that proactively surfaces insights, adapts recommendations as your data changes, and reduces the cognitive load of staying healthy.
+
+---
+
+## Core Features
+
+### AI Coach with Full Context
+A conversational AI (powered by Gemini) that has access to your goals, today's meals, recent workouts, and persistent memory of your preferences. Ask anything: "Am I hitting my protein target this week?", "What should I eat before my run tomorrow?", "How do I adjust my training if I only slept 5 hours?" — and get answers grounded in your actual data, not generic advice.
+
+### Intelligent Meal Logging
+Describe your meal in plain language or take a photo. Soma estimates calories, protein, carbs, fats, and fiber using AI — calibrated to realistic portions and restaurant-style hidden calories. No barcode scanning, no database lookups, no manual gram entry.
+
+### Automatic Workout Sync
+Workouts flow in automatically from Strava. Class bookings are detected from Gmail confirmation emails. Manual logging is supported too. Calorie burn is estimated per activity type and duration — not pulled from inaccurate device sensors.
+
+### Ideas Tab — Location-Aware Recommendations
+Share your location and Soma surfaces nearby restaurants and fitness studios tailored to your current goals. A quick AI overlay explains why each place fits your plan today: "High-protein options match your 40g remaining protein target" or "This studio's HIIT classes align with your 4x/week cardio goal." Filtered by cuisine, venue type, and goal alignment.
+
+### Daily Snapshot Dashboard
+Every day starts with a score — a single metric reflecting how aligned your food and training are with your goals. Quick actions surface the most relevant next step. The chat is always one tap away.
+
+### Calendar & Timeline
+A full view of past and upcoming activity: workouts logged, meals eaten, classes booked. Events sourced automatically from integrations and displayed chronologically.
+
+---
+
+## Design Philosophy
+
+Soma is built to feel like a premium health tool, not a consumer fitness app.
+
+**Dark-first, data-forward.** The interface uses a deep charcoal palette (inspired by Oura and Rise) with high-contrast metric tiles. Data should be readable at a glance without visual noise.
+
+**Calm, not gamified.** No streaks, no badges, no push notifications begging for engagement. The product earns daily use through genuine utility.
+
+**Mobile-first, desktop-capable.** The primary surface is a mobile web app with a bottom tab nav. The same layout scales to desktop with a sidebar.
+
+**Friction as the enemy.** Every logging flow is designed to require the minimum possible input. The AI does the estimation work; the user confirms or adjusts.
+
+---
+
+## Key Technical Decisions
+
+| Decision | Rationale |
 |---|---|
-| Frontend | React 18 + TypeScript + Vite |
-| Styling | Tailwind CSS + shadcn/ui (Radix UI) |
-| Routing | React Router DOM v6 |
-| Data fetching | TanStack React Query |
-| Backend / DB | Supabase (Postgres + Auth + Edge Functions) |
-| AI | Google Gemini 2.0 Flash via OpenAI-compatible API |
-| Maps | Google Maps JavaScript API + Places API (New) |
-| Deployment | Vercel |
-| Testing | Vitest + Testing Library |
+| **Supabase** over a custom backend | Instant auth, Postgres, and serverless functions in one platform. Eliminates an entire infrastructure layer for an early-stage product. |
+| **Gemini 2.0 Flash** over GPT-4 | Cost-performance ratio for high-frequency requests (every meal log, every chat message). Gemini's multimodal capability handles food photo analysis natively. |
+| **OpenAI-compatible endpoint** for Gemini | Allows the edge functions to be model-agnostic. Swapping to a different model is a one-line change. |
+| **Server-Sent Events (SSE)** for chat streaming | Users see the AI response character-by-character rather than waiting for a full response. Critical for perceived responsiveness in a chat interface. |
+| **Google Maps Places API (New)** | `Place.searchNearby` with async dynamic library loading — avoids deprecated `PlacesService`, supports the full new Places data model. |
+| **Edge Functions over a Node API** | Zero-config deployment, global edge distribution, no cold-start management. Each AI feature (macros, chat, workout estimation, ideas) is an isolated function. |
+| **Client-side data fetching** | No intermediate API layer. The React frontend queries Supabase directly via `supabase-js`. Simplifies the stack significantly for a single-developer product. |
+| **Vercel for frontend** | Git-push deploys, global CDN, zero config for a Vite SPA. |
 
 ---
 
-## Architecture
+## What's Next
 
-```
-soma-wellness-agent/
-├── src/
-│   ├── App.tsx                        # Router + providers
-│   ├── pages/
-│   │   ├── Index.tsx                  # Dashboard
-│   │   ├── Meals.tsx                  # Food logging
-│   │   ├── ActivityPage.tsx           # Workout tracking
-│   │   ├── CalendarPage.tsx           # Timeline / calendar
-│   │   ├── IdeasPage.tsx              # Location-aware recommendations
-│   │   ├── Profile.tsx                # Goals, preferences, integrations
-│   │   └── Auth.tsx                   # Login / sign-up
-│   ├── components/
-│   │   ├── AppLayout.tsx              # Shell with mobile bottom nav + desktop side nav
-│   │   ├── ChatInterface.tsx          # Streaming AI chat (voice, images, SSE)
-│   │   ├── meals/                     # Meal-specific components
-│   │   ├── activity/                  # Workout-specific components
-│   │   ├── chat/                      # Chat sub-components
-│   │   ├── profile/                   # Profile dialogs
-│   │   └── ui/                        # shadcn/ui primitives
-│   ├── contexts/
-│   │   └── AuthContext.tsx            # Supabase auth state
-│   ├── hooks/                         # useConversations, useVoiceRecording, etc.
-│   ├── integrations/
-│   │   └── supabase/
-│   │       ├── client.ts              # Supabase client singleton
-│   │       └── types.ts               # Auto-generated DB types
-│   └── lib/
-│       ├── streamChat.ts              # SSE streaming client
-│       └── imageUtils.ts             # Base64 image compression
-│
-├── supabase/
-│   ├── config.toml                    # Project + function config
-│   └── functions/
-│       ├── chat/                      # Streaming AI coach (Gemini, SSE)
-│       ├── estimate-macros/           # AI macro estimation from text or image
-│       ├── estimate-workout/          # AI calorie estimation for workouts
-│       ├── ideas-insight/             # AI insight for nearby places
-│       ├── strava-auth/               # Strava OAuth initiation
-│       ├── strava-callback/           # Strava OAuth callback + token storage
-│       ├── strava-sync/               # Sync Strava activities to workouts table
-│       ├── gmail-auth/                # Gmail OAuth initiation
-│       ├── gmail-callback/            # Gmail OAuth callback + token storage
-│       └── gmail-sync/               # Parse Gmail for class/workout bookings
-│
-└── vercel.json                        # SPA catch-all rewrite rule
-```
-
-### Data flow
-
-- **Auth**: Supabase Auth (email/password). `AuthContext` wraps the app; `ProtectedRoute` guards all main pages.
-- **Data**: All reads/writes go directly from the React client to Supabase Postgres via `@supabase/supabase-js`. No separate API layer.
-- **AI chat**: Frontend calls the `chat` Edge Function, which streams an SSE response using Gemini. Each chunk is rendered in real time. Messages are persisted to `chat_messages` after the stream ends.
-- **Macro estimation**: Frontend calls `estimate-macros` with a text description and/or base64 image. Gemini returns structured JSON via function calling.
-- **Ideas tab**: Browser Geolocation API → Google Maps Places API (New) `Place.searchNearby` → results passed to `ideas-insight` Edge Function → Gemini generates personalised insight and per-place explanations.
-- **Integrations**: Strava and Gmail use OAuth 2.0. Tokens are stored in the `integrations` table. Sync functions pull activity data and write to `workouts` and `timeline_events`.
-
-### Database tables
-
-| Table | Purpose |
-|---|---|
-| `profiles` | Display name, avatar, timezone |
-| `goals` | Target calories, macros, body stats, exercise frequency |
-| `preferences` | Dietary and workout preferences, units |
-| `meals` | Meal logs (name, calories, macros, meal_time, source) |
-| `workouts` | Workout logs (name, type, duration, calories_burned, exercises JSON) |
-| `chat_conversations` | Conversation threads |
-| `chat_messages` | Per-message storage (role, content, images) |
-| `agent_memory` | Persistent facts the AI remembers per user |
-| `integrations` | OAuth tokens for Strava, Gmail |
-| `timeline_events` | Calendar events from integrations |
-| `user_roles` | Admin / user roles |
+- **Oura Ring integration** — resting heart rate, HRV, and sleep score piped into the AI coach context
+- **Adaptive goal recalibration** — goals that update automatically based on training load and trend data
+- **Proactive nudges** — AI-initiated check-ins when patterns suggest under-recovery or goal drift
+- **Meal plan generation** — weekly meal scaffolding based on macro targets and food preferences
+- **Progress photos** — body composition tracking with AI-assisted trend analysis
 
 ---
 
-## Running Locally
+## Docs
 
-### Prerequisites
+Full product documentation lives in [`/docs`](./docs/):
 
-- Node.js 18+
-- [Supabase CLI](https://supabase.com/docs/guides/cli) (`brew install supabase/tap/supabase`)
-
-### 1. Clone and install
-
-```bash
-git clone https://github.com/Katsakk/soma-wellness-agent.git
-cd soma-wellness-agent
-npm install
-```
-
-### 2. Set environment variables
-
-Create a `.env` file in the project root:
-
-```env
-VITE_SUPABASE_URL=https://<your-project-ref>.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=<your-supabase-anon-key>
-VITE_SUPABASE_PROJECT_ID=<your-project-ref>
-VITE_GOOGLE_MAPS_API_KEY=<your-google-maps-api-key>
-```
-
-### 3. Start the dev server
-
-```bash
-npm run dev
-```
-
-The app runs at `http://localhost:8080`.
+- [`IDEAS_TAB_PRD.md`](./docs/IDEAS_TAB_PRD.md) — Ideas tab product requirements
+- [`DESIGN.md`](./docs/DESIGN.md) — Visual design system and component patterns
 
 ---
 
-## Environment Variables
-
-### Frontend (`.env`)
-
-| Variable | Description |
-|---|---|
-| `VITE_SUPABASE_URL` | Supabase project URL |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase `anon` public key |
-| `VITE_SUPABASE_PROJECT_ID` | Supabase project ref |
-| `VITE_GOOGLE_MAPS_API_KEY` | Google Maps API key — requires **Maps JavaScript API** and **Places API (New)** enabled in Google Cloud Console |
-
-### Edge Functions (Supabase Secrets)
-
-Set these in the Supabase dashboard under **Project Settings → Edge Functions → Secrets**, or via CLI:
-
-```bash
-supabase secrets set GOOGLE_AI_API_KEY=<value>
-```
-
-| Secret | Description |
-|---|---|
-| `GOOGLE_AI_API_KEY` | Google AI Studio key for Gemini (all AI features) |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID (Gmail integration) |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret (Gmail integration) |
-| `STRAVA_CLIENT_ID` | Strava OAuth app client ID |
-| `STRAVA_CLIENT_SECRET` | Strava OAuth app client secret |
-| `SUPABASE_URL` | Auto-provided by Supabase runtime |
-| `SUPABASE_SERVICE_ROLE_KEY` | Auto-provided by Supabase runtime |
-
----
-
-## Deploying Edge Functions
-
-```bash
-supabase functions deploy chat
-supabase functions deploy estimate-macros
-supabase functions deploy estimate-workout
-supabase functions deploy ideas-insight
-supabase functions deploy strava-auth
-supabase functions deploy strava-callback
-supabase functions deploy strava-sync
-supabase functions deploy gmail-auth
-supabase functions deploy gmail-callback
-supabase functions deploy gmail-sync
-```
-
----
-
-## Deployment (Vercel)
-
-The app is deployed on Vercel. `vercel.json` contains a catch-all rewrite so React Router handles all client-side routes:
-
-```json
-{
-  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
-}
-```
-
-### Steps
-
-1. Push to `main` — Vercel auto-deploys if the GitHub repo is connected.
-2. Or deploy manually: `npx vercel --prod`
-3. Add the four `VITE_*` variables in **Vercel → Project → Settings → Environment Variables**.
-
-> Supabase Edge Function secrets are managed entirely within Supabase and do not need to be added to Vercel.
-
----
-
-## Key Scripts
-
-```bash
-npm run dev        # Start local dev server (port 8080)
-npm run build      # Production build
-npm run preview    # Preview production build locally
-npm run test       # Run unit tests (Vitest)
-npm run lint       # ESLint
-```
+*For technical setup, environment variables, and deployment instructions, see the [developer guide](./docs/DEVELOPER.md).*
