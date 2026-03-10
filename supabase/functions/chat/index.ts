@@ -143,7 +143,7 @@ serve(async (req) => {
       recentWorkouts
     );
 
-    const model = messageHasImages ? "gemini-2.5-flash" : "gemini-2.5-flash";
+    const model = messageHasImages ? "gemini-2.0-flash" : "gemini-2.0-flash";
 
     const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
@@ -285,7 +285,7 @@ If nothing to extract: {"actions": []}`;
       extractionContent.push({ type: "image_url", image_url: { url } });
     }
 
-    const model = imageUrls.length > 0 ? "gemini-2.5-flash" : "gemini-2.5-flash-lite";
+    const model = imageUrls.length > 0 ? "gemini-2.0-flash" : "gemini-2.0-flash-lite";
 
     const extractionResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
