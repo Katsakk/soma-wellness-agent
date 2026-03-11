@@ -132,8 +132,12 @@ serve(async (req) => {
     const lastUserImages = getImageUrls(lastUserMsg?.content || "");
     const messageHasImages = lastUserImages.length > 0;
 
+    // Only fire extraction if the message likely contains food or workout content
+    const extractionKeywords = /\b(ate|eat|eating|had|have|drink|drank|drinking|meal|food|breakfast|lunch|dinner|snack|calories|protein|carbs|fat|fiber|workout|exercise|run|ran|walk|walked|gym|lift|lifted|swim|swam|bike|biked|class|yoga|pilates|hiit|training|trained|calories burned|kg|lbs|grams?|minutes?|hours?)\b/i;
+    const shouldExtract = extractionKeywords.test(lastUserText) || messageHasImages;
+
     // Fire extraction in parallel (non-blocking) — handles both meals and workouts
-    const extractionPromise = extractAndLogActivity(
+    const extractionPromise = shouldExtract ? extractAndLogActivity(
       lastUserText,
       lastUserImages,
       userId,
@@ -141,9 +145,9 @@ serve(async (req) => {
       GOOGLE_AI_API_KEY,
       todayMeals,
       recentWorkouts
-    );
+    ) : Promise.resolve();
 
-    const model = messageHasImages ? "gemini-2.0-flash" : "gemini-2.0-flash";
+    const model = messageHasImages ? "gemini-2.5-flash" : "gemini-2.5-flash";
 
     const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
@@ -192,7 +196,7 @@ serve(async (req) => {
       } catch (e) {
         console.error("Stream error:", e);
       } finally {
-        await extractionPromise.catch((e) => console.error("Extraction error:", e));
+        await extractionPromise.catch((e: unknown) => console.error("Extraction error:", e));
         await writer.close();
       }
     })();
@@ -285,7 +289,7 @@ If nothing to extract: {"actions": []}`;
       extractionContent.push({ type: "image_url", image_url: { url } });
     }
 
-    const model = imageUrls.length > 0 ? "gemini-2.0-flash" : "gemini-2.0-flash-lite";
+    const model = imageUrls.length > 0 ? "gemini-2.5-flash" : "gemini-2.5-flash";
 
     const extractionResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
