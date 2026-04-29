@@ -72,6 +72,7 @@ const Meals = () => {
   const [tab, setTab]               = useState("today");
   const [targets, setTargets]       = useState(DEFAULT_TARGETS);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [mealDate, setMealDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const mealFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleVoiceResult = useCallback((text: string) => {
@@ -149,16 +150,18 @@ const Meals = () => {
     if (!estimate || !user) return;
     setSaving(true);
     try {
+      const mealDateTime = new Date(`${mealDate}T12:00:00`);
       const { error } = await supabase.from("meals").insert({
-        user_id:  user.id,
-        name:     estimate.name,
-        calories: Math.round(estimate.calories),
-        protein:  Math.round(estimate.protein),
-        carbs:    Math.round(estimate.carbs),
-        fats:     Math.round(estimate.fats),
-        fiber:    estimate.fiber != null ? Math.round(estimate.fiber) : null,
-        notes:    `[${mealType}] ${description.trim()}`,
-        source:   "ai_estimate",
+        user_id:   user.id,
+        name:      estimate.name,
+        calories:  Math.round(estimate.calories),
+        protein:   Math.round(estimate.protein),
+        carbs:     Math.round(estimate.carbs),
+        fats:      Math.round(estimate.fats),
+        fiber:     estimate.fiber != null ? Math.round(estimate.fiber) : null,
+        notes:     `[${mealType}] ${description.trim()}`,
+        source:    "ai_estimate",
+        meal_time: mealDateTime.toISOString(),
       });
       if (error) throw error;
       toast.success("Meal logged!");
@@ -166,6 +169,7 @@ const Meals = () => {
       setDescription("");
       setEstimate(null);
       setPendingImage(null);
+      setMealDate(format(new Date(), "yyyy-MM-dd"));
       fetchMeals();
     } catch (e: any) {
       toast.error(e.message || "Failed to save meal");
@@ -194,7 +198,7 @@ const Meals = () => {
           <h1 className="text-2xl font-bold tracking-tight">Food</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Track your daily nutrition</p>
         </div>
-        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setDescription(""); setEstimate(null); setMealType("breakfast"); setPendingImage(null); } }}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setDescription(""); setEstimate(null); setMealType("breakfast"); setPendingImage(null); setMealDate(format(new Date(), "yyyy-MM-dd")); } }}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-1.5">
               <Plus className="h-4 w-4" /> Log meal
@@ -224,6 +228,18 @@ const Meals = () => {
                     {t.label}
                   </button>
                 ))}
+              </div>
+
+              {/* Date picker */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground shrink-0">Date</label>
+                <input
+                  type="date"
+                  value={mealDate}
+                  max={format(new Date(), "yyyy-MM-dd")}
+                  onChange={(e) => setMealDate(e.target.value)}
+                  className="flex-1 bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
               </div>
 
               {/* Suggestion chips */}
