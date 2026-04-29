@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, UtensilsCrossed, Loader2, Sparkles, Trash2, Send, Mic, MicOff, X } from "lucide-react";
+import { Plus, UtensilsCrossed, Loader2, Sparkles, Trash2, Pencil, Mic, MicOff, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -186,6 +186,17 @@ const Meals = () => {
       setTodayMeals((prev) => prev.filter((m) => m.id !== id));
       setAllMeals((prev) => prev.filter((m) => m.id !== id));
       toast.success("Meal deleted");
+    }
+  };
+
+  const handleEditDate = async (id: string, newDate: string) => {
+    const mealDateTime = new Date(`${newDate}T12:00:00`);
+    const { error } = await supabase.from("meals").update({ meal_time: mealDateTime.toISOString() }).eq("id", id);
+    if (error) {
+      toast.error("Failed to update meal date");
+    } else {
+      fetchMeals();
+      toast.success("Meal date updated");
     }
   };
 
@@ -402,7 +413,7 @@ const Meals = () => {
               <TodayMealsView meals={todayMeals} targets={targets} />
               <div className="space-y-2">
                 {todayMeals.map((meal) => (
-                  <MealCard key={meal.id} meal={meal} onDelete={handleDelete} />
+                  <MealCard key={meal.id} meal={meal} onDelete={handleDelete} onEditDate={handleEditDate} />
                 ))}
               </div>
             </>
@@ -429,7 +440,19 @@ const Meals = () => {
 
 // ── Meal card ─────────────────────────────────────────────────────────────────
 
-function MealCard({ meal, onDelete }: { meal: Meal; onDelete: (id: string) => void }) {
+function MealCard({ meal, onDelete, onEditDate }: {
+  meal: Meal;
+  onDelete: (id: string) => void;
+  onEditDate: (id: string, date: string) => void;
+}) {
+  const [editingDate, setEditingDate] = useState(false);
+  const [dateValue, setDateValue] = useState(format(new Date(meal.meal_time), "yyyy-MM-dd"));
+
+  const handleDateConfirm = () => {
+    setEditingDate(false);
+    onEditDate(meal.id, dateValue);
+  };
+
   return (
     <div className="surface-elevated p-4 flex items-center justify-between group">
       <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -437,7 +460,7 @@ function MealCard({ meal, onDelete }: { meal: Meal; onDelete: (id: string) => vo
           className="mt-1 w-2 h-2 rounded-full shrink-0"
           style={{ backgroundColor: "hsl(var(--metric-calories))" }}
         />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="font-medium text-sm text-foreground truncate">{meal.name}</p>
           <div className="flex flex-wrap gap-x-3 mt-1 text-xs text-muted-foreground">
             <span style={{ color: "hsl(var(--metric-calories))" }}>{meal.calories ?? 0} kcal</span>
@@ -445,15 +468,34 @@ function MealCard({ meal, onDelete }: { meal: Meal; onDelete: (id: string) => vo
             <span>{meal.carbs ?? 0}g carbs</span>
             <span>{meal.fats ?? 0}g fat</span>
           </div>
-          {meal.notes && (
+          {editingDate && (
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                type="date"
+                value={dateValue}
+                max={format(new Date(), "yyyy-MM-dd")}
+                onChange={(e) => setDateValue(e.target.value)}
+                className="bg-secondary border border-border rounded-lg px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <button onClick={handleDateConfirm} className="text-xs text-primary hover:underline">Save</button>
+              <button onClick={() => setEditingDate(false)} className="text-xs text-muted-foreground hover:underline">Cancel</button>
+            </div>
+          )}
+          {meal.notes && !editingDate && (
             <p className="text-xs text-muted-foreground mt-1 truncate italic">"{meal.notes}"</p>
           )}
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-3">
         <span className="text-xs text-muted-foreground">
-          {format(new Date(meal.meal_time), "h:mm a")}
+          {format(new Date(meal.meal_time), "MMM d, h:mm a")}
         </span>
+        <button
+          className="h-7 w-7 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-secondary"
+          onClick={() => setEditingDate((v) => !v)}
+        >
+          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
         <button
           className="h-7 w-7 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10"
           onClick={() => onDelete(meal.id)}
